@@ -48,27 +48,58 @@
     .config-btn { background: #0f3460; border: 1px solid #4ecca3; color: white; border-radius: 5px; padding: 6px; cursor: pointer; font-size: 0.85rem; width: 110px; text-align: center; }
     .config-btn:active { background: #e94560; }
 
-    /* ゲーム画面 */
-    #game-container {
-      display: none; flex-direction: row; gap: 20px; width: 100%; height: 100%; padding: 10px;
-      align-items: center; justify-content: center;
+    /* ゲーム画面全体 */
+    #game-area {
+      display: none; width: 100vw; height: 100vh; position: relative; flex-direction: column; align-items: center; justify-content: center;
     }
+
+    #game-container {
+      display: flex; flex-direction: row; gap: 20px; width: 100%; height: 100%; padding: 20px;
+      align-items: center; justify-content: center; flex: 1; padding-bottom: 50px; /* 下部バーのスペース */
+    }
+    
     .board-wrapper { display: flex; flex-direction: column; align-items: center; }
     .board-header { font-size: 1rem; font-weight: bold; margin-bottom: 6px; display: flex; justify-content: space-between; width: 100%; }
     .canvas-container { border: 4px solid #3282b8; border-bottom: none; border-radius: 6px 6px 0 0; background: #000; box-shadow: 0 0 15px rgba(0,0,0,0.8); overflow: hidden; touch-action: none; }
     
-    @media (orientation: portrait) {
-      #game-container { flex-direction: column; justify-content: space-evenly; }
-      #rival-wrapper { transform: scale(0.65); transform-origin: center top; margin-top: -20px; margin-bottom: -30px; }
-    }
-    
-    #controls { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 15px; width: 100%; max-width: 250px; }
+    #controls-container { display: flex; flex-direction: column; align-items: center; gap: 15px; width: 130px; }
     .action-btn { background: linear-gradient(135deg, #e94560, #ff6b6b); border: none; color: #fff; font-weight: bold; padding: 12px; border-radius: 25px; width: 100%; cursor: pointer; }
     .action-btn:active { transform: scale(0.92); }
     .retire-btn { background: linear-gradient(135deg, #d90429, #ef233c); }
     
     .switch-wrapper { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; cursor: pointer; color: #4ecca3; }
     input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; accent-color: #e94560; }
+
+    /* UI配置制御 (利き手モード) */
+    .absolute-top { position: absolute; top: 15px; padding: 8px 16px; font-size: 0.9rem; width: auto; z-index: 100; font-weight: bold; border-radius: 20px; }
+    .right-handed .absolute-top { left: 15px; right: auto; }
+    .left-handed .absolute-top { right: 15px; left: auto; }
+
+    /* 横画面時の左右並び順 */
+    .right-handed #controls-container { order: 1; }
+    .right-handed #my-wrapper { order: 2; }
+    .right-handed #rival-wrapper { order: 3; }
+    
+    .left-handed #controls-container { order: 3; }
+    .left-handed #my-wrapper { order: 2; }
+    .left-handed #rival-wrapper { order: 1; }
+
+    /* 縦画面レイアウト */
+    @media (orientation: portrait) {
+      #game-container { flex-direction: column !important; justify-content: center; padding-bottom: 20px; }
+      
+      #controls-container {
+        position: absolute; bottom: 70px; z-index: 20; width: 110px;
+      }
+      .right-handed #controls-container { left: 10px; right: auto; }
+      .left-handed #controls-container { right: 10px; left: auto; }
+      
+      #rival-wrapper {
+        position: absolute; top: 50px; transform: scale(0.45); z-index: 15; margin: 0 !important;
+      }
+      .right-handed #rival-wrapper { right: 10px; left: auto; transform-origin: top right; }
+      .left-handed #rival-wrapper { left: 10px; right: auto; transform-origin: top left; }
+    }
 
     #toast { position: absolute; top: 20px; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; border: 1px solid #4ecca3; display: none; z-index: 400; font-weight: bold; }
   </style>
@@ -157,28 +188,44 @@
   </div>
 
   <!-- ゲーム画面 -->
-  <div id="game-container">
-    <div class="board-wrapper" id="my-wrapper">
-      <div class="board-header">
-        <span id="player-label">YOU</span>
-        <span id="score-label">SCORE: 0</span>
-      </div>
-      <div class="canvas-container"><canvas id="my-canvas"></canvas></div>
-      <div id="controls">
-        <button class="action-btn" id="rise-btn">PUSH UP (長押し対応)</button>
-        <label class="switch-wrapper">
-          <input type="checkbox" id="continuous-swipe" checked>連続スワイプ有効
+  <div id="game-area" class="right-handed">
+    <!-- 退出ボタン (絶対配置) -->
+    <button id="exit-btn" class="action-btn retire-btn absolute-top" onclick="exitGame()">退出 (リタイア)</button>
+
+    <div id="game-container">
+      <div id="controls-container">
+        <button class="action-btn" id="rise-btn" style="height: 65px; font-size: 1.1rem; box-shadow: 0 4px #8a0c24;">PUSH UP</button>
+        <label class="switch-wrapper" style="background: rgba(0,0,0,0.6); padding: 8px; border-radius: 10px; flex-direction: column; gap: 5px;">
+          <input type="checkbox" id="continuous-swipe" checked>連続移動
         </label>
-        <button class="action-btn retire-btn" onclick="exitGame()">退出 (リタイア)</button>
+      </div>
+
+      <div class="board-wrapper" id="my-wrapper">
+        <!-- おじゃま予告エリア -->
+        <div id="my-garbage-preview" style="height: 24px; width: 100%; margin-bottom: 5px; display: flex; gap: 4px; align-items: flex-end; overflow: hidden;"></div>
+        <div class="board-header">
+          <span id="player-label">YOU</span>
+          <span id="score-label">SCORE: 0</span>
+        </div>
+        <div class="canvas-container"><canvas id="my-canvas"></canvas></div>
+      </div>
+      
+      <div class="board-wrapper" id="rival-wrapper" style="display: none;">
+        <!-- おじゃま予告エリア -->
+        <div id="rival-garbage-preview" style="height: 24px; width: 100%; margin-bottom: 5px; display: flex; gap: 4px; align-items: flex-end; overflow: hidden;"></div>
+        <div class="board-header">
+          <span style="color: #e94560;">RIVAL</span>
+          <span id="rival-score-label">SCORE: 0</span>
+        </div>
+        <div class="canvas-container"><canvas id="rival-canvas"></canvas></div>
       </div>
     </div>
-    
-    <div class="board-wrapper" id="rival-wrapper" style="display: none;">
-      <div class="board-header">
-        <span style="color: #e94560;">RIVAL</span>
-        <span id="rival-score-label">SCORE: 0</span>
-      </div>
-      <div class="canvas-container"><canvas id="rival-canvas"></canvas></div>
+
+    <!-- 利き手切替トグル -->
+    <div id="bottom-bar" style="position: absolute; bottom: 15px; width: 100%; display: flex; justify-content: center; z-index: 100;">
+      <label class="switch-wrapper" style="background: rgba(0,0,0,0.8); padding: 6px 20px; border-radius: 20px; border: 1px solid #4ecca3;">
+        <input type="checkbox" id="handedness-toggle" onchange="toggleHandedness()"> <span id="handedness-text">右利きモード</span>
+      </label>
     </div>
   </div>
 
@@ -286,7 +333,6 @@
         this.nextRow = []; 
         this.riseOffset = 0; 
         
-        // ハンデによるせり上がり速度の調整 (3: 0.0008, 1: 0.0012(速い), 5: 0.0004(遅い))
         this.riseSpeed = 0.0008 - (handicap - 3) * 0.0002;
         if (this.riseSpeed < 0.0002) this.riseSpeed = 0.0002;
 
@@ -383,7 +429,6 @@
       }
 
       addGarbage(w, h) { 
-        // ハンデによるおじゃまブロック受取量の調整
         let adjustedH = h;
         if (this.handicap === 1) adjustedH = Math.floor(h * 1.5);
         else if (this.handicap === 2) adjustedH = Math.floor(h * 1.25);
@@ -620,7 +665,6 @@
           }
         }
 
-        // 予告段
         for (let c = 0; c < engine.cols; c++) {
           const b = engine.nextRow[c];
           if (b) {
@@ -678,6 +722,8 @@
       }
       think() {
         this.actionTimer = this.thinkInterval;
+        this.engine.isRisingManualPad = false; // ★思考開始時にリセット(自滅バグ修正)
+
         let maxH = 0;
         for (let c=0; c<COLS; c++) { for (let r=0; r<ROWS; r++) { if (this.engine.grid[r][c]) { maxH = Math.max(maxH, ROWS-r); break; } } }
         let bestMoves = [];
@@ -690,8 +736,12 @@
           this.target = bestMoves[Math.floor(Math.random() * bestMoves.length)];
           this.moveTimer = this.moveInterval;
         } else {
-          if (this.level >= 3 && maxH < ROWS - 4) this.engine.isRisingManualPad = true;
-          else { this.engine.isRisingManualPad = false; this.target = { x: Math.floor(Math.random()*(COLS-1)), y: Math.floor(Math.random()*(ROWS-2))+2 }; this.moveTimer = this.moveInterval; }
+          if (this.level >= 3 && maxH < ROWS - 4) {
+            this.engine.isRisingManualPad = true;
+          } else { 
+            this.target = { x: Math.floor(Math.random()*(COLS-1)), y: Math.floor(Math.random()*(ROWS-2))+2 }; 
+            this.moveTimer = this.moveInterval; 
+          }
         }
       }
       canSwapAndMatch(r, c) {
@@ -727,7 +777,6 @@
     function showComMenu() { document.getElementById('main-menu').style.display = 'none'; document.getElementById('com-menu').style.display = 'flex'; }
     function backToMainMenu() { document.getElementById('com-menu').style.display = 'none'; document.getElementById('main-menu').style.display = 'flex'; }
 
-    // 勝敗リザルト・モーダル表示
     function showResultModal(titleMsg) {
       document.getElementById('result-title').innerText = titleMsg;
       document.getElementById('result-status').innerText = '';
@@ -738,7 +787,6 @@
       document.getElementById('result-overlay').style.display = 'flex';
     }
 
-    // 再戦申し込み
     function requestRematch() {
       if (currentMode === 'single' || currentMode === 'com') {
         resetGameLogic();
@@ -759,13 +807,12 @@
       }
     }
 
-    // モード開始統合処理
     function startGame(mode, level = 1) {
       currentMode = mode;
       currentComLevel = level;
       
       document.getElementById('menu-overlay').style.display = 'none';
-      document.getElementById('game-container').style.display = 'flex';
+      document.getElementById('game-area').style.display = 'flex';
       
       setupInput();
       resetGameLogic();
@@ -774,7 +821,6 @@
       loopId = requestAnimationFrame(gameLoop);
     }
 
-    // ロジック初期化＆再生成
     function resetGameLogic() {
       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
       
@@ -799,7 +845,7 @@
         rivalEngine = new PonEngine(
           (state) => { if (state === 'gameover') showResultModal("WIN!!"); },
           (w, h) => { myEngine.addGarbage(w, h); },
-          3 // COMのハンデは普通(3)固定
+          3 
         );
         comAI = new ComAI(rivalEngine, currentComLevel);
       } else if (currentMode.startsWith('online')) {
@@ -826,15 +872,17 @@
       if (syncIntervalId) clearInterval(syncIntervalId);
       syncIntervalId = setInterval(() => {
         if (conn && conn.open && myEngine) {
-          conn.send({ type: 'sync', grid: myEngine.grid, nextRow: myEngine.nextRow, riseOffset: myEngine.riseOffset, score: myEngine.score });
+          conn.send({ 
+            type: 'sync', grid: myEngine.grid, nextRow: myEngine.nextRow, 
+            riseOffset: myEngine.riseOffset, score: myEngine.score, 
+            garbageQueue: myEngine.garbageQueue 
+          });
         }
       }, 100);
       showToast(isGuest ? '接続完了！対戦開始！' : '相手が参加しました！対戦開始！');
     }
 
-    // 退出処理 (リタイア)
     function exitGame() {
-      // プレイ中（ゲームオーバー前）の対戦での退出はサレンダー処理
       if (myEngine && !myEngine.gameOver && currentMode !== 'single') {
         if (!confirm("退出してメニューに戻りますか？\n（対戦時は負けになります）")) return;
         if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'surrender' });
@@ -850,7 +898,7 @@
       if (loopId) { cancelAnimationFrame(loopId); loopId = null; }
 
       document.getElementById('result-overlay').style.display = 'none';
-      document.getElementById('game-container').style.display = 'none';
+      document.getElementById('game-area').style.display = 'none';
       document.getElementById('rival-wrapper').style.display = 'none';
       document.getElementById('menu-overlay').style.display = 'flex';
       document.getElementById('main-menu').style.display = 'flex';
@@ -878,17 +926,40 @@
       if (padConfig.Rise !== null) myEngine.isRisingManualPad = padState[padConfig.Rise];
     }
 
+    function updateGarbagePreview(engine, containerId) {
+      const container = document.getElementById(containerId);
+      if (!container || !engine) return;
+      
+      const qStr = JSON.stringify(engine.garbageQueue);
+      if (container.dataset.qStr === qStr) return;
+      container.dataset.qStr = qStr;
+
+      container.innerHTML = '';
+      engine.garbageQueue.forEach(g => {
+        const block = document.createElement('div');
+        block.style.backgroundColor = '#5c636a';
+        block.style.border = '1px solid #dee2e6';
+        block.style.borderRadius = '2px';
+        block.style.width = `${Math.max(g.w * 6, 12)}px`;
+        block.style.height = `${Math.max(g.h * 6, 12)}px`;
+        block.style.flexShrink = '0';
+        container.appendChild(block);
+      });
+    }
+
     function gameLoop() {
       pollGamepadInput();
       
       if (myEngine) {
         myEngine.update(); myRenderer.draw(myEngine);
         document.getElementById('score-label').innerText = `SCORE: ${myEngine.score} | CHAIN: ${myEngine.chain}`;
+        updateGarbagePreview(myEngine, 'my-garbage-preview');
       }
       if (currentMode !== 'single' && rivalEngine) {
         if (comAI) comAI.update();
         rivalEngine.update(); rivalRenderer.draw(rivalEngine);
         document.getElementById('rival-score-label').innerText = `SCORE: ${rivalEngine.score}`;
+        updateGarbagePreview(rivalEngine, 'rival-garbage-preview');
       }
       loopId = requestAnimationFrame(gameLoop);
     }
@@ -991,6 +1062,7 @@
           if (rivalEngine) {
             rivalEngine.grid = data.grid; rivalEngine.nextRow = data.nextRow; 
             rivalEngine.riseOffset = data.riseOffset; rivalEngine.score = data.score;
+            if (data.garbageQueue) rivalEngine.garbageQueue = data.garbageQueue; // キューも同期
           }
         } else if (data.type === 'garbage') {
           if (myEngine) myEngine.addGarbage(data.w, data.h); 
@@ -1029,6 +1101,31 @@
       if (!targetId) { showToast('IDを入力してください'); return; }
       setupPeer(() => { conn = peer.connect(targetId); conn.on('open', () => { bindConnEvents(); startOnlineGame(true); }); });
     }
+
+    // 利き手モードの初期化
+    function toggleHandedness() {
+      const isLeft = document.getElementById('handedness-toggle').checked;
+      const gameArea = document.getElementById('game-area');
+      const label = document.getElementById('handedness-text');
+      if (isLeft) {
+        gameArea.classList.remove('right-handed');
+        gameArea.classList.add('left-handed');
+        label.innerText = '左利きモード';
+        localStorage.setItem('pdw_handedness', 'left');
+      } else {
+        gameArea.classList.remove('left-handed');
+        gameArea.classList.add('right-handed');
+        label.innerText = '右利きモード';
+        localStorage.setItem('pdw_handedness', 'right');
+      }
+    }
+    
+    window.addEventListener('DOMContentLoaded', () => {
+      if (localStorage.getItem('pdw_handedness') === 'left') {
+        document.getElementById('handedness-toggle').checked = true;
+      }
+      toggleHandedness();
+    });
   </script>
 </body>
 </html>
