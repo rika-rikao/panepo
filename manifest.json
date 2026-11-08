@@ -1,6 +1,6 @@
 {
-  "name": "Inertial Fusion - ぱねぽ",
-  "short_name": "panepo,
+  "name": "ぱねぽ",
+  "short_name": "panepo",
   "description": "パネポン風ゲーム",
   "start_url": "./index.html",
   "display": "standalone",
