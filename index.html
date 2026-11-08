@@ -15,7 +15,6 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
     
-    #top-bar { position: absolute; top: 10px; right: 10px; z-index: 50; }
     .small-btn { background: #0f3460; color: #fff; border: 1px solid #4ecca3; padding: 6px 12px; font-size: 0.9rem; border-radius: 15px; cursor: pointer; }
     .small-btn:active { background: #e94560; }
 
@@ -33,6 +32,7 @@
       font-size: 1.1rem; font-weight: bold; border-radius: 30px; cursor: pointer; min-width: 240px;
     }
     .btn:active { transform: scale(0.95); background: #e94560; }
+    .btn:disabled { background: #555; border-color: #777; cursor: not-allowed; transform: none; }
     .input-box { padding: 10px; border-radius: 20px; border: 2px solid #4ecca3; background: #162447; color: #fff; text-align: center; width: 240px; outline: none; }
     
     /* 設定画面 */
@@ -76,11 +76,7 @@
 <body>
   <div id="toast"></div>
 
-  <div id="top-bar">
-    <button class="small-btn" onclick="openSettings()">⚙️設定</button>
-  </div>
-
-  <!-- 設定画面 -->
+  <!-- 設定画面 (タイトル画面からのみ呼び出し) -->
   <div id="settings-overlay">
     <div class="settings-box">
       <h2 style="text-align: center; color: #4ecca3;">設定</h2>
@@ -108,13 +104,42 @@
     </div>
   </div>
 
+  <!-- リザルト ＆ 再戦モーダル -->
+  <div id="result-overlay" style="display:none; position:absolute; inset:0; background:rgba(0,0,0,0.85); z-index:250; flex-direction:column; align-items:center; justify-content:center;">
+    <div style="background:#162447; padding:30px; border-radius:15px; border:2px solid #e94560; text-align:center; min-width:300px;">
+      <h2 id="result-title" style="color:#ff007f; margin-bottom:15px; font-size:2rem;"></h2>
+      <div id="result-status" style="margin-bottom:20px; color:#4ecca3; font-size:1rem; height:20px;"></div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <button class="btn" id="result-rematch-btn" onclick="requestRematch()">もう一度対戦する</button>
+        <button class="btn retire-btn" onclick="exitGame()">タイトルへ戻る</button>
+      </div>
+    </div>
+  </div>
+
   <!-- メニュー -->
   <div id="menu-overlay">
+    <!-- タイトル画面でのみ表示される設定ボタン -->
+    <button class="small-btn" style="position: absolute; top: 15px; right: 15px; padding: 8px 16px;" onclick="openSettings()">⚙️設定</button>
+
     <div id="main-menu" style="display:flex; flex-direction:column; gap:15px; align-items:center;">
       <h1 class="title">PANEL DE WEB</h1>
+      
+      <div style="font-size: 0.9rem; color: #4ecca3; display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span>自分のハンデ(有利さ):</span>
+        <select id="handicap-val" class="input-box" style="width: auto; padding: 5px; font-size: 0.85rem; border-radius: 10px;">
+          <option value="1">1: 不利 (激ムズ)</option>
+          <option value="2">2: やや不利</option>
+          <option value="3" selected>3: 普通</option>
+          <option value="4">4: やや有利</option>
+          <option value="5">5: 有利 (やさしい)</option>
+        </select>
+      </div>
+
       <button class="btn" onclick="startSingleGame()">ひとりで練習</button>
       <button class="btn" onclick="showComMenu()">COMと対戦</button>
-      <div style="border-top:1px solid #fff; width:100%; margin:10px 0;"></div>
+      
+      <div style="border-top:1px solid #fff; width:100%; margin:5px 0;"></div>
+      
       <button class="btn" onclick="createRoom()">オンライン: 部屋を作る</button>
       <input type="text" id="peer-target-id" class="input-box" placeholder="相手のIDを入力">
       <button class="btn" onclick="joinRoom()">オンライン: 部屋に入る</button>
@@ -140,7 +165,6 @@
       </div>
       <div class="canvas-container"><canvas id="my-canvas"></canvas></div>
       <div id="controls">
-        <!-- せり上げは pointer イベントで長押し判定する -->
         <button class="action-btn" id="rise-btn">PUSH UP (長押し対応)</button>
         <label class="switch-wrapper">
           <input type="checkbox" id="continuous-swipe" checked>連続スワイプ有効
@@ -170,7 +194,6 @@
     let keyConfig = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Swap: 'Space', Rise: 'ShiftLeft' };
     let padConfig = { Up: 12, Down: 13, Left: 14, Right: 15, Swap: 0, Rise: 5 }; // Xbox準拠
     
-    // localStorage から読み込み
     try {
       const sKey = localStorage.getItem('pdw_key');
       const sPad = localStorage.getItem('pdw_pad');
@@ -238,7 +261,6 @@
       });
     }
 
-    // パッドのコンフィグアサイン監視 (gameLoop外でも動くように)
     setInterval(() => {
       if (assigningAction && assignType === 'pad') {
         const pad = navigator.getGamepads()[0];
@@ -257,12 +279,17 @@
 
     // --- ゲームエンジン ---
     class PonEngine {
-      constructor(onStateChange, onSendGarbage) {
+      constructor(onStateChange, onSendGarbage, handicap = 3) {
         this.cols = COLS; this.rows = ROWS;
+        this.handicap = handicap;
         this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
         this.nextRow = []; 
         this.riseOffset = 0; 
-        this.riseSpeed = 0.0008; 
+        
+        // ハンデによるせり上がり速度の調整 (3: 0.0008, 1: 0.0012(速い), 5: 0.0004(遅い))
+        this.riseSpeed = 0.0008 - (handicap - 3) * 0.0002;
+        if (this.riseSpeed < 0.0002) this.riseSpeed = 0.0002;
+
         this.stopTimer = 0;
         this.score = 0; this.chain = 0;
         this.gameOver = false;
@@ -271,7 +298,6 @@
         this.onStateChange = onStateChange;
         this.onSendGarbage = onSendGarbage;
         
-        // 長押しフラグ群
         this.isRisingManualBtn = false;
         this.isRisingManualKey = false;
         this.isRisingManualPad = false;
@@ -334,11 +360,10 @@
         return true;
       }
 
-      // 毎フレーム呼ばれる手動長押しせり上げ
       manualRiseStep() {
         if (this.gameOver) return;
-        this.stopTimer = 0; // 手動せり上げ時は硬直解除
-        this.riseOffset += 0.035; // 連打より少し早いペースで上昇
+        this.stopTimer = 0; 
+        this.riseOffset += 0.035; 
         if (this.riseOffset >= 1.0) this.pushNewRow();
       }
 
@@ -357,7 +382,17 @@
         this.checkMatches(); 
       }
 
-      addGarbage(w, h) { this.garbageQueue.push({ w, h }); }
+      addGarbage(w, h) { 
+        // ハンデによるおじゃまブロック受取量の調整
+        let adjustedH = h;
+        if (this.handicap === 1) adjustedH = Math.floor(h * 1.5);
+        else if (this.handicap === 2) adjustedH = Math.floor(h * 1.25);
+        else if (this.handicap === 4) adjustedH = Math.ceil(h * 0.75);
+        else if (this.handicap === 5) adjustedH = Math.ceil(h * 0.5);
+        
+        if (adjustedH < 1) adjustedH = 1;
+        this.garbageQueue.push({ w, h: adjustedH }); 
+      }
 
       spawnGarbage() {
         if (this.garbageQueue.length === 0) return;
@@ -397,7 +432,6 @@
       update() {
         if (this.gameOver) return;
 
-        // 長押しか通常せり上がりか
         if (this.isRisingManualBtn || this.isRisingManualKey || this.isRisingManualPad) {
           this.manualRiseStep();
         } else {
@@ -603,7 +637,6 @@
           }
         }
 
-        // カーソル
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
         ctx.strokeRect(engine.cursor.x * CELL_PX - 2, engine.cursor.y * CELL_PX - offsetY - 2, CELL_PX * 2 + 4, CELL_PX + 4);
 
@@ -657,7 +690,7 @@
           this.target = bestMoves[Math.floor(Math.random() * bestMoves.length)];
           this.moveTimer = this.moveInterval;
         } else {
-          if (this.level >= 3 && maxH < ROWS - 4) this.engine.isRisingManualPad = true; // AIも長押し処理を活用
+          if (this.level >= 3 && maxH < ROWS - 4) this.engine.isRisingManualPad = true;
           else { this.engine.isRisingManualPad = false; this.target = { x: Math.floor(Math.random()*(COLS-1)), y: Math.floor(Math.random()*(ROWS-2))+2 }; this.moveTimer = this.moveInterval; }
         }
       }
@@ -685,44 +718,143 @@
 
     // --- システム管理 ---
     let myEngine, rivalEngine, myRenderer, rivalRenderer, comAI = null;
-    let peer = null, conn = null, isMultiplayer = false;
-    let loopId = null;
+    let peer = null, conn = null;
+    let currentMode = 'single', currentComLevel = 1;
+    let rematchReady = { me: false, rival: false };
+    let loopId = null, syncIntervalId = null;
 
     function showToast(msg) { const t = document.getElementById('toast'); t.innerText = msg; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000); }
     function showComMenu() { document.getElementById('main-menu').style.display = 'none'; document.getElementById('com-menu').style.display = 'flex'; }
     function backToMainMenu() { document.getElementById('com-menu').style.display = 'none'; document.getElementById('main-menu').style.display = 'flex'; }
 
-    function initGame() {
+    // 勝敗リザルト・モーダル表示
+    function showResultModal(titleMsg) {
+      document.getElementById('result-title').innerText = titleMsg;
+      document.getElementById('result-status').innerText = '';
+      const btn = document.getElementById('result-rematch-btn');
+      btn.style.display = 'inline-block';
+      btn.disabled = false;
+      btn.innerText = 'もう一度対戦する';
+      document.getElementById('result-overlay').style.display = 'flex';
+    }
+
+    // 再戦申し込み
+    function requestRematch() {
+      if (currentMode === 'single' || currentMode === 'com') {
+        resetGameLogic();
+        document.getElementById('result-overlay').style.display = 'none';
+      } else if (currentMode.startsWith('online')) {
+        rematchReady.me = true;
+        if (conn && conn.open) conn.send({ type: 'rematch_req' });
+        
+        if (rematchReady.rival) {
+          resetGameLogic();
+          document.getElementById('result-overlay').style.display = 'none';
+        } else {
+          const btn = document.getElementById('result-rematch-btn');
+          btn.disabled = true;
+          btn.innerText = '待機中...';
+          document.getElementById('result-status').innerText = '相手の返答を待っています...';
+        }
+      }
+    }
+
+    // モード開始統合処理
+    function startGame(mode, level = 1) {
+      currentMode = mode;
+      currentComLevel = level;
+      
+      document.getElementById('menu-overlay').style.display = 'none';
       document.getElementById('game-container').style.display = 'flex';
-      myRenderer = new BoardRenderer('my-canvas'); rivalRenderer = new BoardRenderer('rival-canvas');
-      myEngine = new PonEngine(
-        (state) => { if (state === 'gameover' && conn) conn.send({ type: 'win' }); },
-        (w, h) => { if (conn) conn.send({ type: 'garbage', w, h }); }
-      );
+      
       setupInput();
+      resetGameLogic();
+      
       if (loopId) cancelAnimationFrame(loopId);
       loopId = requestAnimationFrame(gameLoop);
     }
 
+    // ロジック初期化＆再生成
+    function resetGameLogic() {
+      const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
+      
+      myRenderer = new BoardRenderer('my-canvas'); 
+      rivalRenderer = new BoardRenderer('rival-canvas');
+      
+      myEngine = new PonEngine(
+        (state) => { 
+          if (state === 'gameover') {
+            if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'win' });
+            showResultModal(currentMode === 'single' ? "GAME OVER" : "LOSE...");
+          }
+        },
+        (w, h) => { 
+          if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'garbage', w, h });
+          else if (currentMode === 'com' && rivalEngine) rivalEngine.addGarbage(w, h);
+        },
+        handicap
+      );
+      
+      if (currentMode === 'com') {
+        rivalEngine = new PonEngine(
+          (state) => { if (state === 'gameover') showResultModal("WIN!!"); },
+          (w, h) => { myEngine.addGarbage(w, h); },
+          3 // COMのハンデは普通(3)固定
+        );
+        comAI = new ComAI(rivalEngine, currentComLevel);
+      } else if (currentMode.startsWith('online')) {
+        rivalEngine = new PonEngine(null, null, 3);
+      }
+      
+      rematchReady = { me: false, rival: false };
+    }
+
+    function startSingleGame() { 
+      document.getElementById('rival-wrapper').style.display = 'none';
+      startGame('single'); 
+    }
+    
+    function startComGame(level) {
+      document.getElementById('rival-wrapper').style.display = 'flex';
+      startGame('com', level);
+    }
+
+    function startOnlineGame(isGuest) {
+      document.getElementById('rival-wrapper').style.display = 'flex';
+      startGame(isGuest ? 'online_guest' : 'online_host');
+      
+      if (syncIntervalId) clearInterval(syncIntervalId);
+      syncIntervalId = setInterval(() => {
+        if (conn && conn.open && myEngine) {
+          conn.send({ type: 'sync', grid: myEngine.grid, nextRow: myEngine.nextRow, riseOffset: myEngine.riseOffset, score: myEngine.score });
+        }
+      }, 100);
+      showToast(isGuest ? '接続完了！対戦開始！' : '相手が参加しました！対戦開始！');
+    }
+
     // 退出処理 (リタイア)
     function exitGame() {
-      if (!confirm("退出してメニューに戻りますか？\n（対戦時は負けになります）")) return;
-      
-      if (isMultiplayer && conn && conn.open) {
-        conn.send({ type: 'surrender' });
+      // プレイ中（ゲームオーバー前）の対戦での退出はサレンダー処理
+      if (myEngine && !myEngine.gameOver && currentMode !== 'single') {
+        if (!confirm("退出してメニューに戻りますか？\n（対戦時は負けになります）")) return;
+        if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'surrender' });
+      } else {
+        if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'leave' });
       }
       
       myEngine = null; rivalEngine = null; comAI = null;
       if (conn) { conn.close(); conn = null; }
       if (peer) { peer.destroy(); peer = null; }
-      isMultiplayer = false;
       
+      if (syncIntervalId) { clearInterval(syncIntervalId); syncIntervalId = null; }
+      if (loopId) { cancelAnimationFrame(loopId); loopId = null; }
+
+      document.getElementById('result-overlay').style.display = 'none';
       document.getElementById('game-container').style.display = 'none';
       document.getElementById('rival-wrapper').style.display = 'none';
       document.getElementById('menu-overlay').style.display = 'flex';
       document.getElementById('main-menu').style.display = 'flex';
       document.getElementById('com-menu').style.display = 'none';
-      if (loopId) cancelAnimationFrame(loopId);
     }
 
     let padState = {}, prevPadState = {};
@@ -753,7 +885,7 @@
         myEngine.update(); myRenderer.draw(myEngine);
         document.getElementById('score-label').innerText = `SCORE: ${myEngine.score} | CHAIN: ${myEngine.chain}`;
       }
-      if (isMultiplayer && rivalEngine) {
+      if (currentMode !== 'single' && rivalEngine) {
         if (comAI) comAI.update();
         rivalEngine.update(); rivalRenderer.draw(rivalEngine);
         document.getElementById('rival-score-label').innerText = `SCORE: ${rivalEngine.score}`;
@@ -817,14 +949,12 @@
       });
       cvs.addEventListener('pointercancel', () => { isDown = false; });
 
-      // PUSH UP ボタンの長押し判定
       const riseBtn = document.getElementById('rise-btn');
       riseBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); if(myEngine) myEngine.isRisingManualBtn = true; });
       ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => {
         riseBtn.addEventListener(ev, () => { if(myEngine) myEngine.isRisingManualBtn = false; });
       });
 
-      // キーボード コンフィグ反映
       window.addEventListener('keydown', (e) => {
         if (assigningAction && assignType === 'key') {
           e.preventDefault();
@@ -848,65 +978,56 @@
       });
     }
 
-    // --- ゲーム開始用関数 ---
-    function startSingleGame() { document.getElementById('menu-overlay').style.display = 'none'; initGame(); }
-    
-    function startComGame(level) {
-      document.getElementById('menu-overlay').style.display = 'none';
-      document.getElementById('rival-wrapper').style.display = 'flex';
-      initGame();
-      rivalEngine = new PonEngine(
-        (state) => { if (state === 'gameover') showToast('COMがゲームオーバー！あなたの勝ち！'); },
-        (w, h) => { myEngine.addGarbage(w, h); }
-      );
-      myEngine.onSendGarbage = (w, h) => rivalEngine.addGarbage(w, h);
-      comAI = new ComAI(rivalEngine, level);
-      isMultiplayer = true;
-    }
-
     // --- オンライン対戦 (PeerJS) ---
     function setupPeer(onOpen) {
       peer = new Peer();
       peer.on('open', (id) => onOpen(id));
       peer.on('connection', (c) => { conn = c; bindConnEvents(); startOnlineGame(false); });
     }
+    
     function bindConnEvents() {
       conn.on('data', (data) => {
         if (data.type === 'sync') {
-          rivalEngine.grid = data.grid; rivalEngine.nextRow = data.nextRow; 
-          rivalEngine.riseOffset = data.riseOffset; rivalEngine.score = data.score;
+          if (rivalEngine) {
+            rivalEngine.grid = data.grid; rivalEngine.nextRow = data.nextRow; 
+            rivalEngine.riseOffset = data.riseOffset; rivalEngine.score = data.score;
+          }
         } else if (data.type === 'garbage') {
-          myEngine.addGarbage(data.w, data.h); showToast('おじゃまブロックが飛んできた！');
+          if (myEngine) myEngine.addGarbage(data.w, data.h); 
+          showToast('おじゃまブロックが飛んできた！');
         } else if (data.type === 'win') {
-          showToast('相手がゲームオーバー！あなたの勝利！');
-        } else if (data.type === 'surrender') {
-          showToast('相手が降参・退出しました！あなたの勝利！');
+          showResultModal('WIN!!');
           if (rivalEngine) rivalEngine.gameOver = true;
+        } else if (data.type === 'surrender') {
+          showResultModal('WIN!! (相手が退出)');
+          if (rivalEngine) rivalEngine.gameOver = true;
+          document.getElementById('result-rematch-btn').style.display = 'none';
+        } else if (data.type === 'rematch_req') {
+          rematchReady.rival = true;
+          if (rematchReady.me) {
+            resetGameLogic();
+            document.getElementById('result-overlay').style.display = 'none';
+          } else {
+            document.getElementById('result-status').innerText = '相手が再戦を希望しています！';
+          }
+        } else if (data.type === 'leave') {
+          document.getElementById('result-status').innerText = '相手が退出しました。';
+          document.getElementById('result-rematch-btn').style.display = 'none';
         }
       });
     }
+    
     function createRoom() {
       setupPeer((id) => {
         document.getElementById('peer-info').innerHTML = `部屋ID: <b>${id}</b><br>相手にこのIDを伝えてください`;
         navigator.clipboard?.writeText(id); showToast('IDをコピーしました！待機中...');
       });
     }
+    
     function joinRoom() {
       const targetId = document.getElementById('peer-target-id').value.trim();
       if (!targetId) { showToast('IDを入力してください'); return; }
       setupPeer(() => { conn = peer.connect(targetId); conn.on('open', () => { bindConnEvents(); startOnlineGame(true); }); });
-    }
-    function startOnlineGame(isGuest) {
-      isMultiplayer = true; comAI = null;
-      document.getElementById('menu-overlay').style.display = 'none';
-      document.getElementById('rival-wrapper').style.display = 'flex';
-      initGame(); rivalEngine = new PonEngine();
-      setInterval(() => {
-        if (conn && conn.open && myEngine) {
-          conn.send({ type: 'sync', grid: myEngine.grid, nextRow: myEngine.nextRow, riseOffset: myEngine.riseOffset, score: myEngine.score });
-        }
-      }, 100);
-      showToast(isGuest ? '接続完了！対戦開始！' : '相手が参加しました！対戦開始！');
     }
   </script>
 </body>
