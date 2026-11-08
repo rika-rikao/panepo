@@ -14,7 +14,8 @@
       overflow: hidden; width: 100vw; height: 100vh;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
-    /* メニュー */
+    
+    /* メニュー系 */
     #menu-overlay {
       position: absolute; inset: 0; background: rgba(10, 10, 25, 0.95); z-index: 100;
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; padding: 20px;
@@ -25,12 +26,12 @@
     }
     .btn {
       background: #0f3460; color: #fff; border: 2px solid #e94560; padding: 12px 28px;
-      font-size: 1.1rem; font-weight: bold; border-radius: 30px; cursor: pointer; min-width: 240px;
+      font-size: 1.1rem; font-weight: bold; border-radius: 30px; cursor: pointer; min-width: 240px; transition: 0.2s;
     }
     .btn:active { transform: scale(0.95); background: #e94560; }
     .input-box { padding: 10px; border-radius: 20px; border: 2px solid #4ecca3; background: #162447; color: #fff; text-align: center; width: 240px; outline: none; }
     
-    /* ゲーム画面 */
+    /* ゲームレイアウト */
     #game-container {
       display: flex; flex-direction: row; gap: 20px; width: 100%; height: 100%; padding: 10px;
       align-items: center; justify-content: center;
@@ -45,18 +46,41 @@
     }
     
     #controls { display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 15px; }
-    .action-btn { background: linear-gradient(135deg, #e94560, #ff6b6b); border: none; color: #fff; font-weight: bold; padding: 12px 24px; border-radius: 25px; width: 100%; }
+    .action-btn { background: linear-gradient(135deg, #e94560, #ff6b6b); border: none; color: #fff; font-weight: bold; padding: 12px 24px; border-radius: 25px; width: 100%; cursor: pointer; touch-action: none; }
     .action-btn:active { transform: scale(0.92); }
     
     .switch-wrapper { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; cursor: pointer; color: #4ecca3; }
     input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; accent-color: #e94560; }
-
     #toast { position: absolute; top: 20px; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; border: 1px solid #4ecca3; display: none; z-index: 200; }
+
+    /* 設定オーバーレイ */
+    #settings-overlay {
+      position: absolute; inset: 0; background: rgba(0, 0, 0, 0.85); z-index: 300;
+      display: none; align-items: center; justify-content: center;
+    }
+    .settings-modal {
+      background: #162447; border: 2px solid #4ecca3; border-radius: 10px; padding: 20px;
+      width: 90%; max-width: 450px; max-height: 90%; overflow-y: auto;
+    }
+    .settings-modal h2 { margin-bottom: 15px; border-bottom: 1px solid #4ecca3; padding-bottom: 5px; text-align: center; }
+    .setting-section { margin-bottom: 20px; }
+    .setting-section h3 { font-size: 1.1rem; color: #e94560; margin-bottom: 10px; }
+    .key-table { width: 100%; border-collapse: collapse; text-align: center; }
+    .key-table th { font-size: 0.9rem; padding: 5px; color: #4ecca3; }
+    .key-table td { padding: 5px; }
+    .key-table button {
+      background: #1a1a2e; color: #fff; border: 1px solid #3282b8; padding: 8px; 
+      border-radius: 5px; width: 100%; cursor: pointer; font-size: 0.85rem; font-weight: bold;
+    }
+    .key-table button:hover { background: #3282b8; }
+    .listening { background: #e94560 !important; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0.5; } }
   </style>
 </head>
 <body>
   <div id="toast"></div>
 
+  <!-- メニュー画面 -->
   <div id="menu-overlay">
     <div id="main-menu" style="display:flex; flex-direction:column; gap:15px; align-items:center;">
       <h1 class="title">PANEL DE WEB</h1>
@@ -66,7 +90,9 @@
       <button class="btn" onclick="createRoom()">オンライン: 部屋を作る</button>
       <input type="text" id="peer-target-id" class="input-box" placeholder="相手のIDを入力">
       <button class="btn" onclick="joinRoom()">オンライン: 部屋に入る</button>
-      <div id="peer-info" style="font-size:0.9rem; color:#4ecca3;"></div>
+      <div style="border-top:1px solid #fff; width:100%; margin:10px 0;"></div>
+      <button class="btn" style="background:#005082; border-color:#3282b8;" onclick="openSettings()">設定 (BGM / キーコンフィグ)</button>
+      <div id="peer-info" style="font-size:0.9rem; color:#4ecca3; margin-top:10px;"></div>
     </div>
     
     <div id="com-menu" style="display:none; flex-direction:column; gap:15px; align-items:center;">
@@ -79,6 +105,52 @@
     </div>
   </div>
 
+  <!-- 設定画面 -->
+  <div id="settings-overlay">
+    <div class="settings-modal">
+      <h2>設定 (Settings)</h2>
+      
+      <div class="setting-section">
+        <h3>🎵 BGM再生 (プレイリスト対応)</h3>
+        <div style="margin-bottom:10px; display:flex; gap:10px; justify-content:center;">
+          <label style="cursor:pointer; background:#0f3460; padding:8px 12px; border-radius:15px; font-size:0.9rem;">
+            ファイルを選択
+            <input type="file" multiple accept="audio/*" style="display:none;" onchange="handleBgmSelect(this.files)">
+          </label>
+          <label style="cursor:pointer; background:#e94560; padding:8px 12px; border-radius:15px; font-size:0.9rem;">
+            フォルダごと選択
+            <input type="file" webkitdirectory directory multiple accept="audio/*" style="display:none;" onchange="handleBgmSelect(this.files)">
+          </label>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span>音量:</span>
+          <input type="range" id="bgm-vol" min="0" max="1" step="0.05" value="0.5" style="flex:1; accent-color:#4ecca3;" onchange="updateVolume(this.value)">
+        </div>
+        <div id="bgm-status" style="font-size:0.85rem; margin-top:8px; color:#aaa; text-align:center;">BGM: 未設定</div>
+      </div>
+
+      <div class="setting-section">
+        <h3>🎮 キー ＆ パッド設定</h3>
+        <table class="key-table">
+          <tr><th>操作</th><th>キーボード</th><th>ゲームパッド</th></tr>
+          <tr><td>上</td><td><button id="key-up-btn" onclick="startConfig('up', 'key')"></button></td><td><button id="pad-up-btn" onclick="startConfig('up', 'pad')"></button></td></tr>
+          <tr><td>下</td><td><button id="key-down-btn" onclick="startConfig('down', 'key')"></button></td><td><button id="pad-down-btn" onclick="startConfig('down', 'pad')"></button></td></tr>
+          <tr><td>左</td><td><button id="key-left-btn" onclick="startConfig('left', 'key')"></button></td><td><button id="pad-left-btn" onclick="startConfig('left', 'pad')"></button></td></tr>
+          <tr><td>右</td><td><button id="key-right-btn" onclick="startConfig('right', 'key')"></button></td><td><button id="pad-right-btn" onclick="startConfig('right', 'pad')"></button></td></tr>
+          <tr><td>スワップ</td><td><button id="key-swap-btn" onclick="startConfig('swap', 'key')"></button></td><td><button id="pad-swap-btn" onclick="startConfig('swap', 'pad')"></button></td></tr>
+          <tr><td>せり上げ</td><td><button id="key-rise-btn" onclick="startConfig('rise', 'key')"></button></td><td><button id="pad-rise-btn" onclick="startConfig('rise', 'pad')"></button></td></tr>
+        </table>
+        <div style="font-size:0.75rem; color:#aaa; margin-top:8px; line-height:1.4;">
+          ※ボタンを押してから、割り当てたいキー/ボタンを入力してください。<br>
+          ※パッドの十字キーやスティックでの移動は標準で対応しています。
+        </div>
+      </div>
+      
+      <button class="btn" style="width:100%; min-width:unset; margin-top:10px;" onclick="closeSettings()">設定を閉じる</button>
+    </div>
+  </div>
+
+  <!-- ゲーム画面 -->
   <div id="game-container">
     <div class="board-wrapper" id="my-wrapper">
       <div class="board-header">
@@ -87,7 +159,7 @@
       </div>
       <div class="canvas-container"><canvas id="my-canvas"></canvas></div>
       <div id="controls">
-        <button class="action-btn" id="rise-btn">PUSH UP (せり上げ)</button>
+        <button class="action-btn" id="rise-btn">PUSH UP (長押しでせり上げ)</button>
         <label class="switch-wrapper">
           <input type="checkbox" id="continuous-swipe" checked>
           連続スワイプ(ドラッグ)を有効にする
@@ -104,12 +176,180 @@
   </div>
 
   <script>
+    // --- 定数・基本設定 ---
     const COLS = 6, ROWS = 12, CELL_PX = 36;
     const COLORS = [
       { id: 1, bg: '#ff3366', symbol: '♥' }, { id: 2, bg: '#ffd700', symbol: '★' },
       { id: 3, bg: '#00d4ff', symbol: '◆' }, { id: 4, bg: '#00e676', symbol: '♣' },
       { id: 5, bg: '#ff9100', symbol: '▲' }
     ];
+
+    // --- BGM管理システム ---
+    let bgmList = [];
+    let currentBgmIdx = 0;
+    let audioPlayer = new Audio();
+    
+    // 設定復元
+    let bgmVolume = parseFloat(localStorage.getItem('ponBgmVolume')) ?? 0.5;
+    document.getElementById('bgm-vol').value = bgmVolume;
+    audioPlayer.volume = bgmVolume;
+
+    audioPlayer.addEventListener('ended', () => {
+      if (bgmList.length === 1) { audioPlayer.play(); } // 1曲ループ
+      else if (bgmList.length > 1) {
+        currentBgmIdx = (currentBgmIdx + 1) % bgmList.length;
+        playCurrentBgm(); // 次の曲へ
+      }
+    });
+
+    function playCurrentBgm() {
+      if(bgmList.length === 0) return;
+      const file = bgmList[currentBgmIdx];
+      audioPlayer.src = URL.createObjectURL(file);
+      audioPlayer.play().catch(e => console.error("BGM自動再生ブロック:", e));
+      document.getElementById('bgm-status').innerText = `BGM: 再生中 [${currentBgmIdx+1}/${bgmList.length}] - ${file.name}`;
+    }
+
+    function handleBgmSelect(files) {
+      bgmList = Array.from(files).filter(f => f.type.startsWith('audio/'));
+      if (bgmList.length > 0) {
+        currentBgmIdx = 0;
+        playCurrentBgm();
+      } else {
+        document.getElementById('bgm-status').innerText = `BGM: 音声ファイルが見つかりません`;
+      }
+    }
+    
+    function updateVolume(val) {
+      bgmVolume = parseFloat(val);
+      audioPlayer.volume = bgmVolume;
+      localStorage.setItem('ponBgmVolume', bgmVolume);
+    }
+
+    // --- キー ＆ ゲームパッド コンフィグシステム ---
+    const defaultKeys = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', swap: 'Space', rise: 'ShiftLeft' };
+    const defaultPads = { up: 12, down: 13, left: 14, right: 15, swap: 0, rise: 1 }; // 一般的なXbox配置: 0=A, 1=B
+    
+    let keyBindings = JSON.parse(localStorage.getItem('ponKeyConfig')) || { ...defaultKeys };
+    let padBindings = JSON.parse(localStorage.getItem('ponPadConfig')) || { ...defaultPads };
+    
+    let listeningAction = null;
+    let listeningType = null; // 'key' or 'pad'
+
+    function saveConfig() {
+      localStorage.setItem('ponKeyConfig', JSON.stringify(keyBindings));
+      localStorage.setItem('ponPadConfig', JSON.stringify(padBindings));
+    }
+
+    function updateConfigUI() {
+      ['up','down','left','right','swap','rise'].forEach(act => {
+        document.getElementById(`key-${act}-btn`).innerText = keyBindings[act];
+        document.getElementById(`pad-${act}-btn`).innerText = `Btn ${padBindings[act]}`;
+        document.getElementById(`key-${act}-btn`).classList.remove('listening');
+        document.getElementById(`pad-${act}-btn`).classList.remove('listening');
+      });
+    }
+    
+    function startConfig(action, type) {
+      updateConfigUI();
+      listeningAction = action; listeningType = type;
+      const btn = document.getElementById(`${type}-${action}-btn`);
+      btn.innerText = "入力待ち...";
+      btn.classList.add('listening');
+    }
+
+    function openSettings() { updateConfigUI(); document.getElementById('settings-overlay').style.display = 'flex'; }
+    function closeSettings() { listeningAction = null; updateConfigUI(); document.getElementById('settings-overlay').style.display = 'none'; }
+
+
+    // --- 入力フラグ（せり上げ長押し・連射対応用） ---
+    let isBtnRising = false;
+    let isKeyRising = false;
+    let isPadRising = false;
+    let padTimers = { up: 0, down: 0, left: 0, right: 0 }; // パッドの自前リピート用タイマー
+
+    function executeAction(action) {
+      if (!myEngine) return;
+      if (action === 'up' && myEngine.cursor.y > 0) myEngine.cursor.y--;
+      if (action === 'down' && myEngine.cursor.y < ROWS - 1) myEngine.cursor.y++;
+      if (action === 'left' && myEngine.cursor.x > 0) myEngine.cursor.x--;
+      if (action === 'right' && myEngine.cursor.x < COLS - 2) myEngine.cursor.x++;
+      if (action === 'swap') myEngine.swap(myEngine.cursor.x, myEngine.cursor.y);
+    }
+
+    // グローバルキーボードイベント (ゲーム操作＆コンフィグ)
+    window.addEventListener('keydown', (e) => {
+      if (listeningAction && listeningType === 'key') {
+        e.preventDefault();
+        keyBindings[listeningAction] = e.code;
+        listeningAction = null; saveConfig(); updateConfigUI();
+        return;
+      }
+      
+      if (!myEngine || document.getElementById('settings-overlay').style.display === 'flex') return;
+
+      // せり上げキー長押しチェック
+      if (e.code === keyBindings.rise) { isKeyRising = true; return; }
+
+      // 移動＆スワップ（OSネイティブのキーリピートを利用）
+      Object.keys(keyBindings).forEach(act => {
+        if (act !== 'rise' && e.code === keyBindings[act]) { e.preventDefault(); executeAction(act); }
+      });
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === keyBindings.rise) isKeyRising = false;
+    });
+
+    // パッドのポーリング関数 (毎フレーム実行)
+    function pollGamepad() {
+      const pads = navigator.getGamepads();
+      const pad = pads[0];
+      if (!pad) return;
+
+      // コンフィグ入力待ち
+      if (listeningAction && listeningType === 'pad') {
+        for (let i = 0; i < pad.buttons.length; i++) {
+          if (pad.buttons[i].pressed) {
+            padBindings[listeningAction] = i;
+            listeningAction = null; saveConfig(); updateConfigUI();
+            return;
+          }
+        }
+      }
+
+      if (!myEngine || document.getElementById('settings-overlay').style.display === 'flex') return;
+
+      const getBtn = (id) => pad.buttons[id] && pad.buttons[id].pressed;
+      // スティック入力対応 (閾値 0.5)
+      const getAxis = (idx, th) => pad.axes[idx] < -th ? -1 : (pad.axes[idx] > th ? 1 : 0);
+
+      const state = {
+        up: getBtn(padBindings.up) || getAxis(1, 0.5) === -1,
+        down: getBtn(padBindings.down) || getAxis(1, 0.5) === 1,
+        left: getBtn(padBindings.left) || getAxis(0, 0.5) === -1,
+        right: getBtn(padBindings.right) || getAxis(0, 0.5) === 1,
+        swap: getBtn(padBindings.swap),
+        rise: getBtn(padBindings.rise)
+      };
+
+      // パッド専用のキーリピート処理（押しっぱなしで連続移動）
+      ['up', 'down', 'left', 'right', 'swap'].forEach(act => {
+        if (state[act]) {
+          // 押した瞬間 (0) または 一定時間経過後 (20) に一定間隔 (5) でリピート
+          if (padTimers[act] === 0 || (padTimers[act] > 20 && padTimers[act] % 5 === 0)) {
+            if (padTimers[act] === 0 || act !== 'swap') { executeAction(act); } // スワップは連打しない
+          }
+          padTimers[act]++;
+        } else {
+          padTimers[act] = 0;
+        }
+      });
+
+      // せり上げフラグ更新
+      isPadRising = state.rise;
+    }
+
 
     // --- ゲームエンジン ---
     class PonEngine {
@@ -119,6 +359,7 @@
         this.nextRow = []; 
         this.riseOffset = 0; 
         this.riseSpeed = 0.0008; 
+        this.isRising = false; // 長押し高速せり上げフラグ
         this.stopTimer = 0;
         this.score = 0; this.chain = 0;
         this.gameOver = false;
@@ -131,9 +372,7 @@
 
       initGrid(initRows) {
         for (let r = this.rows - initRows; r < this.rows; r++) {
-          for (let c = 0; c < this.cols; c++) {
-            this.grid[r][c] = this.getRandomBlock(c, r);
-          }
+          for (let c = 0; c < this.cols; c++) this.grid[r][c] = this.getRandomBlock(c, r);
         }
         this.nextRow = this.createNextRow();
       }
@@ -141,12 +380,8 @@
       getRandomBlock(c, r, avoidMatch = true) {
         let valid = [...COLORS].map(col => col.id);
         if (avoidMatch) {
-          if (c >= 2 && this.grid[r] && this.grid[r][c-1] && this.grid[r][c-2] && this.grid[r][c-1].type === this.grid[r][c-2].type) {
-            valid = valid.filter(t => t !== this.grid[r][c-1].type);
-          }
-          if (r <= this.rows - 3 && this.grid[r+1] && this.grid[r+2] && this.grid[r+1][c] && this.grid[r+2][c] && this.grid[r+1][c].type === this.grid[r+2][c].type) {
-            valid = valid.filter(t => t !== this.grid[r+1][c].type);
-          }
+          if (c >= 2 && this.grid[r] && this.grid[r][c-1] && this.grid[r][c-2] && this.grid[r][c-1].type === this.grid[r][c-2].type) valid = valid.filter(t => t !== this.grid[r][c-1].type);
+          if (r <= this.rows - 3 && this.grid[r+1] && this.grid[r+2] && this.grid[r+1][c] && this.grid[r+2][c] && this.grid[r+1][c].type === this.grid[r+2][c].type) valid = valid.filter(t => t !== this.grid[r+1][c].type);
         }
         return { type: valid[Math.floor(Math.random() * valid.length)], state: 'normal', timer: 0, fallY: 0, chainEligible: false };
       }
@@ -155,9 +390,7 @@
         const row = [];
         for (let c = 0; c < this.cols; c++) {
           let choices = [...COLORS].map(x => x.id);
-          if (c >= 2 && row[c-1].type === row[c-2].type) {
-            choices = choices.filter(t => t !== row[c-1].type);
-          }
+          if (c >= 2 && row[c-1].type === row[c-2].type) choices = choices.filter(t => t !== row[c-1].type);
           row.push({ type: choices[Math.floor(Math.random() * choices.length)], state: 'normal', timer: 0, fallY: 0, chainEligible: false });
         }
         return row;
@@ -168,7 +401,6 @@
         if (c < 0 || c >= this.cols - 1 || r < 0 || r >= this.rows) return false;
         const b1 = this.grid[r][c], b2 = this.grid[r][c + 1];
         
-        // 【修正】空中浮遊ブロックは移動不可（通常ブロックで、直下が空マスの場合は浮遊中とみなす）
         const isFloating = (b, c_idx) => {
            if (!b) return false;
            if (r >= this.rows - 1) return false; 
@@ -180,33 +412,19 @@
         if (b1 && b1.type === 'garbage') return false;
         if (b2 && b2.type === 'garbage') return false;
 
-        // 浮いているブロックをスワイプで動かそうとしたらブロックする
+        // 浮遊ブロックのロック
         if (b1 && isFloating(b1, c)) return false;
         if (b2 && isFloating(b2, c + 1)) return false;
 
-        // 入れ替え実行
-        this.grid[r][c] = b2; 
-        this.grid[r][c + 1] = b1;
-
+        this.grid[r][c] = b2; this.grid[r][c + 1] = b1;
         if (this.grid[r][c]) this.grid[r][c].chainEligible = false;
         if (this.grid[r][c+1]) this.grid[r][c+1].chainEligible = false;
 
-        // 【修正】入れ替え後に直下が空マスになったブロックのみを「ホバー（浮遊）状態」にする。一番下の段は絶対にホバーしない。
-        if (this.grid[r][c] && r+1 < this.rows && this.grid[r+1][c] === null) { 
-            this.grid[r][c].state = 'hover'; this.grid[r][c].timer = 12; 
-        }
-        if (this.grid[r][c+1] && r+1 < this.rows && this.grid[r+1][c+1] === null) { 
-            this.grid[r][c+1].state = 'hover'; this.grid[r][c+1].timer = 12; 
-        }
+        if (this.grid[r][c] && r+1 < this.rows && this.grid[r+1][c] === null) { this.grid[r][c].state = 'hover'; this.grid[r][c].timer = 12; }
+        if (this.grid[r][c+1] && r+1 < this.rows && this.grid[r+1][c+1] === null) { this.grid[r][c+1].state = 'hover'; this.grid[r][c+1].timer = 12; }
 
         this.checkMatches();
         return true;
-      }
-
-      manualRise() {
-        if (this.gameOver) return;
-        this.riseOffset += 0.1;
-        if (this.riseOffset >= 1.0) this.pushNewRow();
       }
 
       pushNewRow() {
@@ -229,7 +447,6 @@
       spawnGarbage() {
         if (this.garbageQueue.length === 0) return;
         const g = this.garbageQueue.shift();
-        
         const groupId = Date.now() + Math.random();
         const startCol = Math.floor(Math.random() * (this.cols - g.w + 1));
         
@@ -244,13 +461,10 @@
 
       transformGarbageNear(r, c) {
         let triggeredGroupIds = new Set();
-        
         [[r-1,c],[r+1,c],[r,c-1],[r,c+1]].forEach(([nr, nc]) => {
           if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols) {
             const b = this.grid[nr][nc];
-            if (b && b.type === 'garbage' && b.groupId) {
-              triggeredGroupIds.add(b.groupId);
-            }
+            if (b && b.type === 'garbage' && b.groupId) triggeredGroupIds.add(b.groupId);
           }
         });
 
@@ -260,9 +474,7 @@
               const b = this.grid[rr][cc];
               if (b && b.type === 'garbage' && triggeredGroupIds.has(b.groupId)) {
                 b.type = COLORS[Math.floor(Math.random() * COLORS.length)].id;
-                b.state = 'hover'; 
-                b.timer = 15; 
-                b.chainEligible = true;
+                b.state = 'hover'; b.timer = 15; b.chainEligible = true;
                 delete b.groupId; 
               }
             }
@@ -273,9 +485,15 @@
       update() {
         if (this.gameOver) return;
 
-        if (this.stopTimer > 0) this.stopTimer--;
-        else {
-          this.riseOffset += this.riseSpeed;
+        // --- せり上げ処理 (長押し超高速対応) ---
+        if (this.stopTimer > 0) {
+          this.stopTimer--; // 連鎖・消去中はせり上がらない
+        } else {
+          if (this.isRising) {
+             this.riseOffset += 0.045; // 爆速せり上げ
+          } else {
+             this.riseOffset += this.riseSpeed; // 通常せり上げ
+          }
           if (this.riseOffset >= 1.0) this.pushNewRow();
         }
 
@@ -344,12 +562,9 @@
             let matchCount = 1;
             for (let k = 1; c + k < this.cols; k++) {
               const b2 = this.grid[r][c+k];
-              if (b2 && b2.state === 'normal' && b2.type === b1.type) matchCount++;
-              else break;
+              if (b2 && b2.state === 'normal' && b2.type === b1.type) matchCount++; else break;
             }
-            if (matchCount >= 3) {
-              for (let k = 0; k < matchCount; k++) matchedPositions.add(`${r},${c+k}`);
-            }
+            if (matchCount >= 3) for (let k = 0; k < matchCount; k++) matchedPositions.add(`${r},${c+k}`);
           }
         }
         for (let c = 0; c < this.cols; c++) {
@@ -359,12 +574,9 @@
             let matchCount = 1;
             for (let k = 1; r + k < this.rows; k++) {
               const b2 = this.grid[r+k][c];
-              if (b2 && b2.state === 'normal' && b2.type === b1.type) matchCount++;
-              else break;
+              if (b2 && b2.state === 'normal' && b2.type === b1.type) matchCount++; else break;
             }
-            if (matchCount >= 3) {
-              for (let k = 0; k < matchCount; k++) matchedPositions.add(`${r+k},${c}`);
-            }
+            if (matchCount >= 3) for (let k = 0; k < matchCount; k++) matchedPositions.add(`${r+k},${c}`);
           }
         }
 
@@ -383,9 +595,7 @@
 
           if (this.onSendGarbage && (matchedPositions.size >= 4 || this.chain >= 2)) {
             let gw = Math.min(this.cols, 3 + (this.chain > 1 ? this.chain - 1 : 0));
-            if (matchedPositions.size >= 4 && this.chain < 2) {
-               gw = Math.min(this.cols, Math.max(3, matchedPositions.size - 1));
-            }
+            if (matchedPositions.size >= 4 && this.chain < 2) gw = Math.min(this.cols, Math.max(3, matchedPositions.size - 1));
             const gh = Math.max(1, this.chain - 1);
             this.onSendGarbage(gw, gh);
           }
@@ -399,9 +609,7 @@
           }
           if (!isMoving) {
             this.chain = 0;
-            for (let r = 0; r < this.rows; r++) {
-              for (let c = 0; c < this.cols; c++) if (this.grid[r][c]) this.grid[r][c].chainEligible = false;
-            }
+            for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) if (this.grid[r][c]) this.grid[r][c].chainEligible = false;
           }
         }
       }
@@ -428,10 +636,8 @@
               const y = r * CELL_PX - offsetY + (b.fallY * CELL_PX);
 
               if (b.type === 'garbage') {
-                ctx.fillStyle = '#5c636a'; 
-                ctx.fillRect(x, y, CELL_PX, CELL_PX);
-                ctx.strokeStyle = '#dee2e6';
-                ctx.lineWidth = 2;
+                ctx.fillStyle = '#5c636a'; ctx.fillRect(x, y, CELL_PX, CELL_PX);
+                ctx.strokeStyle = '#dee2e6'; ctx.lineWidth = 2;
                 
                 const sameTop = r > 0 && engine.grid[r-1][c] && engine.grid[r-1][c].groupId === b.groupId;
                 const sameBottom = r < engine.rows-1 && engine.grid[r+1][c] && engine.grid[r+1][c].groupId === b.groupId;
@@ -467,8 +673,7 @@
             const y = engine.rows * CELL_PX - offsetY;
             const conf = COLORS.find(item => item.id === b.type);
             if (conf) {
-              ctx.globalAlpha = 0.35; 
-              ctx.fillStyle = conf.bg;
+              ctx.globalAlpha = 0.35; ctx.fillStyle = conf.bg;
               ctx.beginPath(); ctx.roundRect(x+2, y+2, CELL_PX-4, CELL_PX-4, 8); ctx.fill();
               ctx.fillStyle = '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(conf.symbol, x+CELL_PX/2, y+CELL_PX/2);
               ctx.globalAlpha = 1.0;  
@@ -487,15 +692,13 @@
       }
     }
 
-    // --- COM(AI) エンジン ---
+    // --- COM(AI) エンジン (略さず記載) ---
     class ComAI {
       constructor(engine, level) {
-        this.engine = engine; this.level = level;
-        this.target = null;
+        this.engine = engine; this.level = level; this.target = null;
         this.thinkInterval = [50, 35, 20, 5][level - 1]; 
         this.moveInterval = [15, 10, 5, 2][level - 1];   
-        this.actionTimer = this.thinkInterval;
-        this.moveTimer = 0;
+        this.actionTimer = this.thinkInterval; this.moveTimer = 0;
         this.engine.riseSpeed = 0.0006 + (level * 0.0002); 
       }
       update() {
@@ -509,12 +712,7 @@
             else if (this.engine.cursor.x > this.target.x) { this.engine.cursor.x--; moved = true; }
             else if (this.engine.cursor.y < this.target.y) { this.engine.cursor.y++; moved = true; }
             else if (this.engine.cursor.y > this.target.y) { this.engine.cursor.y--; moved = true; }
-            
-            if (!moved) {
-              this.engine.swap(this.engine.cursor.x, this.engine.cursor.y);
-              this.target = null;
-              this.actionTimer = this.thinkInterval;
-            }
+            if (!moved) { this.engine.swap(this.engine.cursor.x, this.engine.cursor.y); this.target = null; this.actionTimer = this.thinkInterval; }
           }
         } else {
           this.actionTimer--;
@@ -525,50 +723,32 @@
         this.actionTimer = this.thinkInterval;
         let maxH = 0;
         for (let c=0; c<COLS; c++) { for (let r=0; r<ROWS; r++) { if (this.engine.grid[r][c]) { maxH = Math.max(maxH, ROWS-r); break; } } }
-        
         let bestMoves = [];
         for (let r=0; r<ROWS; r++) {
-          for (let c=0; c<COLS-1; c++) {
-            if (this.canSwapAndMatch(r, c)) bestMoves.push({x:c, y:r});
-          }
+          for (let c=0; c<COLS-1; c++) { if (this.canSwapAndMatch(r, c)) bestMoves.push({x:c, y:r}); }
         }
         if (bestMoves.length > 0) {
           this.target = bestMoves[Math.floor(Math.random() * bestMoves.length)];
           this.moveTimer = this.moveInterval;
         } else {
-          if (this.level >= 3 && maxH < ROWS - 4) {
-            this.engine.manualRise();
-          } else {
-            this.target = { x: Math.floor(Math.random()*(COLS-1)), y: Math.floor(Math.random()*(ROWS-2))+2 };
-            this.moveTimer = this.moveInterval;
-          }
+          if (this.level >= 3 && maxH < ROWS - 4) { this.engine.isRising = true; setTimeout(()=> this.engine.isRising=false, 300); }
+          else { this.target = { x: Math.floor(Math.random()*(COLS-1)), y: Math.floor(Math.random()*(ROWS-2))+2 }; this.moveTimer = this.moveInterval; }
         }
       }
       canSwapAndMatch(r, c) {
         const b1 = this.engine.grid[r][c], b2 = this.engine.grid[r][c+1];
-        if (b1 && b1.state !== 'normal') return false;
-        if (b2 && b2.state !== 'normal') return false;
-        if (!b1 && !b2) return false;
-        if (b1 && b2 && b1.type === b2.type) return false;
-        
+        if (b1 && b1.state !== 'normal') return false; if (b2 && b2.state !== 'normal') return false;
+        if (!b1 && !b2) return false; if (b1 && b2 && b1.type === b2.type) return false;
         const temp = this.engine.grid.map(row => row.map(cell => cell ? {...cell} : null));
         let t = temp[r][c]; temp[r][c] = temp[r][c+1]; temp[r][c+1] = t;
-        
-        for (let rr=0; rr<ROWS; rr++) {
-          for (let cc=0; cc<COLS-2; cc++) {
-            if (temp[rr][cc] && temp[rr][cc].type!=='garbage' && temp[rr][cc+1] && temp[rr][cc+2] && temp[rr][cc].type===temp[rr][cc+1].type && temp[rr][cc].type===temp[rr][cc+2].type) return true;
-          }
-        }
-        for (let cc=0; cc<COLS; cc++) {
-          for (let rr=0; rr<ROWS-2; rr++) {
-            if (temp[rr][cc] && temp[rr][cc].type!=='garbage' && temp[rr+1][cc] && temp[rr+2][cc] && temp[rr][cc].type===temp[rr+1][cc].type && temp[rr][cc].type===temp[rr+2][cc].type) return true;
-          }
-        }
+        for (let rr=0; rr<ROWS; rr++) { for (let cc=0; cc<COLS-2; cc++) { if (temp[rr][cc] && temp[rr][cc].type!=='garbage' && temp[rr][cc+1] && temp[rr][cc+2] && temp[rr][cc].type===temp[rr][cc+1].type && temp[rr][cc].type===temp[rr][cc+2].type) return true; } }
+        for (let cc=0; cc<COLS; cc++) { for (let rr=0; rr<ROWS-2; rr++) { if (temp[rr][cc] && temp[rr][cc].type!=='garbage' && temp[rr+1][cc] && temp[rr+2][cc] && temp[rr][cc].type===temp[rr+1][cc].type && temp[rr][cc].type===temp[rr+2][cc].type) return true; } }
         return false;
       }
     }
 
-    // --- システム管理 ---
+
+    // --- システム管理 ＆ 入力バインディング ---
     let myEngine, rivalEngine, myRenderer, rivalRenderer, comAI = null;
     let peer = null, conn = null, isMultiplayer = false;
 
@@ -582,12 +762,18 @@
         (state) => { if (state === 'gameover' && conn) conn.send({ type: 'win' }); },
         (w, h) => { if (conn) conn.send({ type: 'garbage', w, h }); }
       );
-      setupInput();
+      setupTouchInput();
+      setupRiseButton();
       requestAnimationFrame(gameLoop);
     }
 
     function gameLoop() {
+      pollGamepad(); // 毎フレームゲームパッドの入力をチェック
+      
       if (myEngine) {
+        // キー・パッド・画面ボタンのいずれかが押されていれば「長押しせり上げ」実行
+        myEngine.isRising = isKeyRising || isPadRising || isBtnRising;
+        
         myEngine.update(); myRenderer.draw(myEngine);
         document.getElementById('score-label').innerText = `SCORE: ${myEngine.score} | CHAIN: ${myEngine.chain}`;
       }
@@ -599,135 +785,89 @@
       requestAnimationFrame(gameLoop);
     }
 
-    // --- 【完全修正】巻き込みを防止し、掴んだブロックのみを確実に移動させる ---
-    function setupInput() {
+    // タッチ＆マウス（スワイプ）操作
+    function setupTouchInput() {
       const cvs = document.getElementById('my-canvas');
       let isDown = false;
-      let grabbedCol = -1;
-      let grabbedRow = -1;
-      let initialCanvasX = 0;
-      let initialCanvasY = 0;
+      let grabbedCol = -1, grabbedRow = -1;
+      let initialCanvasX = 0, initialCanvasY = 0;
 
       cvs.addEventListener('pointerdown', (e) => {
-        isDown = true;
-        cvs.setPointerCapture(e.pointerId);
-        
+        isDown = true; cvs.setPointerCapture(e.pointerId);
         const rect = cvs.getBoundingClientRect();
-        const scaleX = cvs.width / rect.width;
-        const scaleY = cvs.height / rect.height;
-        const canvasX = (e.clientX - rect.left) * scaleX;
-        const canvasY = (e.clientY - rect.top) * scaleY;
-
-        initialCanvasX = canvasX;
-        initialCanvasY = canvasY;
-
-        // タップしたマスの列と行をロックオン
+        const scaleX = cvs.width / rect.width, scaleY = cvs.height / rect.height;
+        const canvasX = (e.clientX - rect.left) * scaleX, canvasY = (e.clientY - rect.top) * scaleY;
+        initialCanvasX = canvasX; initialCanvasY = canvasY;
         grabbedCol = Math.floor(canvasX / CELL_PX);
-        if (grabbedCol >= COLS) grabbedCol = COLS - 1;
-        if (grabbedCol < 0) grabbedCol = 0;
-
+        if (grabbedCol >= COLS) grabbedCol = COLS - 1; if (grabbedCol < 0) grabbedCol = 0;
         grabbedRow = Math.floor((canvasY + myEngine.riseOffset * CELL_PX) / CELL_PX);
-        if (grabbedRow >= ROWS) grabbedRow = ROWS - 1;
-        if (grabbedRow < 0) grabbedRow = 0;
+        if (grabbedRow >= ROWS) grabbedRow = ROWS - 1; if (grabbedRow < 0) grabbedRow = 0;
       });
 
       cvs.addEventListener('pointermove', (e) => {
         if (!isDown) return;
-        
         const rect = cvs.getBoundingClientRect();
         const scaleX = cvs.width / rect.width;
         const canvasX = (e.clientX - rect.left) * scaleX;
-        
-        // 指が現在どの列を指しているか
         let targetCol = Math.floor(canvasX / CELL_PX);
-        if (targetCol >= COLS) targetCol = COLS - 1;
-        if (targetCol < 0) targetCol = 0;
-
+        if (targetCol >= COLS) targetCol = COLS - 1; if (targetCol < 0) targetCol = 0;
         const continuous = document.getElementById('continuous-swipe').checked;
 
-        // 指の方向に、掴んだブロックを引っ張り続ける
         while (targetCol > grabbedCol) {
-           myEngine.cursor.x = grabbedCol;
-           myEngine.cursor.y = grabbedRow;
-           // 右にスワップ
-           let swapped = myEngine.swap(grabbedCol, grabbedRow);
-           if (swapped) {
-              grabbedCol++; // 成功した時だけ対象を追従させる（巻き込み防止）
-              if (!continuous) { isDown = false; break; } // 単発設定なら1回で終了
-           } else {
-              break; // 壁や浮遊ブロック等で動かせないなら停止
-           }
+           myEngine.cursor.x = grabbedCol; myEngine.cursor.y = grabbedRow;
+           if (myEngine.swap(grabbedCol, grabbedRow)) {
+              grabbedCol++; if (!continuous) { isDown = false; break; }
+           } else break;
         }
-        
         while (targetCol < grabbedCol) {
-           myEngine.cursor.x = grabbedCol - 1;
-           myEngine.cursor.y = grabbedRow;
-           // 左にスワップ
-           let swapped = myEngine.swap(grabbedCol - 1, grabbedRow);
-           if (swapped) {
-              grabbedCol--;
-              if (!continuous) { isDown = false; break; }
-           } else {
-              break;
-           }
+           myEngine.cursor.x = grabbedCol - 1; myEngine.cursor.y = grabbedRow;
+           if (myEngine.swap(grabbedCol - 1, grabbedRow)) {
+              grabbedCol--; if (!continuous) { isDown = false; break; }
+           } else break;
         }
       });
 
       cvs.addEventListener('pointerup', (e) => {
         if (!isDown) return;
-        isDown = false;
-        cvs.releasePointerCapture(e.pointerId);
-        
+        isDown = false; cvs.releasePointerCapture(e.pointerId);
         const rect = cvs.getBoundingClientRect();
-        const scaleX = cvs.width / rect.width;
-        const scaleY = cvs.height / rect.height;
-        const canvasX = (e.clientX - rect.left) * scaleX;
-        const canvasY = (e.clientY - rect.top) * scaleY;
-        
-        const dx = canvasX - initialCanvasX;
-        const dy = canvasY - initialCanvasY;
-        
-        // 指をほとんど動かさずに離した場合は「タップ」とみなし、カーソルだけを移動
+        const scaleX = cvs.width / rect.width, scaleY = cvs.height / rect.height;
+        const canvasX = (e.clientX - rect.left) * scaleX, canvasY = (e.clientY - rect.top) * scaleY;
+        const dx = canvasX - initialCanvasX, dy = canvasY - initialCanvasY;
         if (Math.abs(dx) < CELL_PX * 0.3 && Math.abs(dy) < CELL_PX * 0.3) {
           let c = Math.floor(canvasX / CELL_PX);
-          if (c >= COLS - 1) c = COLS - 2; // 右端タップの調整
-          myEngine.cursor.x = c;
-          myEngine.cursor.y = grabbedRow;
+          if (c >= COLS - 1) c = COLS - 2;
+          myEngine.cursor.x = c; myEngine.cursor.y = grabbedRow;
         }
       });
 
       cvs.addEventListener('pointercancel', () => { isDown = false; });
-
-      document.getElementById('rise-btn').addEventListener('click', () => myEngine.manualRise());
-
-      window.addEventListener('keydown', (e) => {
-        if (!myEngine) return;
-        if (e.key === 'ArrowUp' && myEngine.cursor.y > 0) myEngine.cursor.y--;
-        if (e.key === 'ArrowDown' && myEngine.cursor.y < ROWS - 1) myEngine.cursor.y++;
-        if (e.key === 'ArrowLeft' && myEngine.cursor.x > 0) myEngine.cursor.x--;
-        if (e.key === 'ArrowRight' && myEngine.cursor.x < COLS - 2) myEngine.cursor.x++;
-        if (e.key === ' ') myEngine.swap(myEngine.cursor.x, myEngine.cursor.y);
-        if (e.key === 'Shift') myEngine.manualRise();
-      });
     }
 
-    // --- ゲーム開始用関数 ---
+    // 画面のPUSH UPボタン長押し制御
+    function setupRiseButton() {
+      const btn = document.getElementById('rise-btn');
+      const startRise = (e) => { e.preventDefault(); isBtnRising = true; };
+      const stopRise = (e) => { e.preventDefault(); isBtnRising = false; };
+      btn.addEventListener('pointerdown', startRise);
+      btn.addEventListener('pointerup', stopRise);
+      btn.addEventListener('pointerleave', stopRise);
+      btn.addEventListener('pointercancel', stopRise);
+      btn.addEventListener('contextmenu', e => e.preventDefault());
+    }
+
+    // --- 各種ゲーム開始・通信 ---
     function startSingleGame() { document.getElementById('menu-overlay').style.display = 'none'; initGame(); }
-    
     function startComGame(level) {
       document.getElementById('menu-overlay').style.display = 'none';
       document.getElementById('rival-wrapper').style.display = 'flex';
       initGame();
-      rivalEngine = new PonEngine(
-        (state) => { if (state === 'gameover') showToast('COMがゲームオーバー！あなたの勝ち！'); },
-        (w, h) => { myEngine.addGarbage(w, h); }
-      );
+      rivalEngine = new PonEngine((state) => { if (state === 'gameover') showToast('COMがゲームオーバー！あなたの勝ち！'); }, (w, h) => { myEngine.addGarbage(w, h); });
       myEngine.onSendGarbage = (w, h) => rivalEngine.addGarbage(w, h);
       comAI = new ComAI(rivalEngine, level);
       isMultiplayer = true;
     }
 
-    // --- オンライン対戦 (PeerJS) ---
     function setupPeer(onOpen) {
       peer = new Peer();
       peer.on('open', (id) => onOpen(id));
@@ -736,10 +876,8 @@
     function bindConnEvents() {
       conn.on('data', (data) => {
         if (data.type === 'sync') {
-          rivalEngine.grid = data.grid; 
-          rivalEngine.nextRow = data.nextRow; 
-          rivalEngine.riseOffset = data.riseOffset; 
-          rivalEngine.score = data.score;
+          rivalEngine.grid = data.grid; rivalEngine.nextRow = data.nextRow; 
+          rivalEngine.riseOffset = data.riseOffset; rivalEngine.score = data.score;
         } else if (data.type === 'garbage') {
           myEngine.addGarbage(data.w, data.h); showToast('おじゃまブロックが飛んできた！');
         } else if (data.type === 'win') showToast('相手がゲームオーバー！あなたの勝利！');
@@ -758,15 +896,9 @@
     }
     function startOnlineGame(isGuest) {
       isMultiplayer = true; comAI = null;
-      document.getElementById('menu-overlay').style.display = 'none';
-      document.getElementById('rival-wrapper').style.display = 'flex';
+      document.getElementById('menu-overlay').style.display = 'none'; document.getElementById('rival-wrapper').style.display = 'flex';
       initGame(); rivalEngine = new PonEngine();
-      setInterval(() => {
-        if (conn && conn.open) conn.send({ 
-          type: 'sync', grid: myEngine.grid, nextRow: myEngine.nextRow, 
-          riseOffset: myEngine.riseOffset, score: myEngine.score 
-        });
-      }, 100);
+      setInterval(() => { if (conn && conn.open) conn.send({ type: 'sync', grid: myEngine.grid, nextRow: myEngine.nextRow, riseOffset: myEngine.riseOffset, score: myEngine.score }); }, 100);
       showToast(isGuest ? '接続完了！対戦開始！' : '相手が参加しました！対戦開始！');
     }
   </script>
