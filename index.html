@@ -168,16 +168,36 @@
         if (c < 0 || c >= this.cols - 1 || r < 0 || r >= this.rows) return false;
         const b1 = this.grid[r][c], b2 = this.grid[r][c + 1];
         
-        if (b1 && (b1.state === 'match' || b1.state === 'fall' || b1.type === 'garbage')) return false;
-        if (b2 && (b2.state === 'match' || b2.state === 'fall' || b2.type === 'garbage')) return false;
+        // 【修正】空中浮遊ブロックは移動不可（通常ブロックで、直下が空マスの場合は浮遊中とみなす）
+        const isFloating = (b, c_idx) => {
+           if (!b) return false;
+           if (r >= this.rows - 1) return false; 
+           return this.grid[r+1][c_idx] === null;
+        };
 
-        this.grid[r][c] = b2; this.grid[r][c + 1] = b1;
+        if (b1 && b1.state !== 'normal') return false;
+        if (b2 && b2.state !== 'normal') return false;
+        if (b1 && b1.type === 'garbage') return false;
+        if (b2 && b2.type === 'garbage') return false;
+
+        // 浮いているブロックをスワイプで動かそうとしたらブロックする
+        if (b1 && isFloating(b1, c)) return false;
+        if (b2 && isFloating(b2, c + 1)) return false;
+
+        // 入れ替え実行
+        this.grid[r][c] = b2; 
+        this.grid[r][c + 1] = b1;
 
         if (this.grid[r][c]) this.grid[r][c].chainEligible = false;
         if (this.grid[r][c+1]) this.grid[r][c+1].chainEligible = false;
 
-        if (this.grid[r][c] && (r+1 >= this.rows || this.grid[r+1][c] === null)) { this.grid[r][c].state = 'hover'; this.grid[r][c].timer = 12; }
-        if (this.grid[r][c+1] && (r+1 >= this.rows || this.grid[r+1][c+1] === null)) { this.grid[r][c+1].state = 'hover'; this.grid[r][c+1].timer = 12; }
+        // 【修正】入れ替え後に直下が空マスになったブロックのみを「ホバー（浮遊）状態」にする。一番下の段は絶対にホバーしない。
+        if (this.grid[r][c] && r+1 < this.rows && this.grid[r+1][c] === null) { 
+            this.grid[r][c].state = 'hover'; this.grid[r][c].timer = 12; 
+        }
+        if (this.grid[r][c+1] && r+1 < this.rows && this.grid[r+1][c+1] === null) { 
+            this.grid[r][c+1].state = 'hover'; this.grid[r][c+1].timer = 12; 
+        }
 
         this.checkMatches();
         return true;
@@ -210,9 +230,7 @@
         if (this.garbageQueue.length === 0) return;
         const g = this.garbageQueue.shift();
         
-        // 塊を管理するための一意のグループIDを生成
         const groupId = Date.now() + Math.random();
-        // 落下させる列のスタート位置（左端から）
         const startCol = Math.floor(Math.random() * (this.cols - g.w + 1));
         
         for (let r = 0; r < g.h; r++) {
@@ -227,7 +245,6 @@
       transformGarbageNear(r, c) {
         let triggeredGroupIds = new Set();
         
-        // 隣接するおじゃまブロックの groupId を収集
         [[r-1,c],[r+1,c],[r,c-1],[r,c+1]].forEach(([nr, nc]) => {
           if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols) {
             const b = this.grid[nr][nc];
@@ -237,7 +254,6 @@
           }
         });
 
-        // 触れたグループIDと同じおじゃまブロックを盤面全体から探して一斉に解凍する
         if (triggeredGroupIds.size > 0) {
           for (let rr = 0; rr < this.rows; rr++) {
             for (let cc = 0; cc < this.cols; cc++) {
@@ -247,7 +263,7 @@
                 b.state = 'hover'; 
                 b.timer = 15; 
                 b.chainEligible = true;
-                delete b.groupId; // おじゃま属性を消去
+                delete b.groupId; 
               }
             }
           }
@@ -309,7 +325,7 @@
                 b.state = 'normal'; b.fallY = 0; needsMatchCheck = true;
               }
             }
-            if (b.state === 'normal' && this.grid[r+1][c] === null) {
+            if (b.state === 'normal' && r+1 < this.rows && this.grid[r+1][c] === null) {
               b.state = 'hover'; b.timer = 10;
             }
           }
@@ -366,7 +382,6 @@
           this.score += matchedPositions.size * 10 * this.chain;
 
           if (this.onSendGarbage && (matchedPositions.size >= 4 || this.chain >= 2)) {
-            // おじゃまブロックの幅計算（必ず3以上になるように調整）
             let gw = Math.min(this.cols, 3 + (this.chain > 1 ? this.chain - 1 : 0));
             if (matchedPositions.size >= 4 && this.chain < 2) {
                gw = Math.min(this.cols, Math.max(3, matchedPositions.size - 1));
@@ -413,7 +428,6 @@
               const y = r * CELL_PX - offsetY + (b.fallY * CELL_PX);
 
               if (b.type === 'garbage') {
-                // 同じグループのおじゃまブロックの境界線を消し、巨大な1つの塊として描画
                 ctx.fillStyle = '#5c636a'; 
                 ctx.fillRect(x, y, CELL_PX, CELL_PX);
                 ctx.strokeStyle = '#dee2e6';
@@ -585,37 +599,36 @@
       requestAnimationFrame(gameLoop);
     }
 
-    // --- 完全修正版：ポインターイベント制御（ズレ解消 ＆ 連続スワイプ対応） ---
+    // --- 【完全修正】巻き込みを防止し、掴んだブロックのみを確実に移動させる ---
     function setupInput() {
       const cvs = document.getElementById('my-canvas');
-      let startX = 0, startY = 0;
-      let initialStartX = 0, initialStartY = 0;
-      let currentCellX = 0, currentCellY = 0;
       let isDown = false;
+      let grabbedCol = -1;
+      let grabbedRow = -1;
+      let initialCanvasX = 0;
+      let initialCanvasY = 0;
 
       cvs.addEventListener('pointerdown', (e) => {
         isDown = true;
         cvs.setPointerCapture(e.pointerId);
         
-        // 【ズレ修正】borderなどを除外した正確な解像度スケールを算出してピクセル変換
         const rect = cvs.getBoundingClientRect();
         const scaleX = cvs.width / rect.width;
         const scaleY = cvs.height / rect.height;
         const canvasX = (e.clientX - rect.left) * scaleX;
         const canvasY = (e.clientY - rect.top) * scaleY;
 
-        startX = canvasX;
-        startY = canvasY;
-        initialStartX = canvasX;
-        initialStartY = canvasY;
+        initialCanvasX = canvasX;
+        initialCanvasY = canvasY;
 
-        currentCellX = Math.floor(canvasX / CELL_PX);
-        currentCellY = Math.floor((canvasY + myEngine.riseOffset * CELL_PX) / CELL_PX);
-        
-        // 予告段などをタップした場合は無効
-        if (currentCellY < 0 || currentCellY >= ROWS) {
-          isDown = false;
-        }
+        // タップしたマスの列と行をロックオン
+        grabbedCol = Math.floor(canvasX / CELL_PX);
+        if (grabbedCol >= COLS) grabbedCol = COLS - 1;
+        if (grabbedCol < 0) grabbedCol = 0;
+
+        grabbedRow = Math.floor((canvasY + myEngine.riseOffset * CELL_PX) / CELL_PX);
+        if (grabbedRow >= ROWS) grabbedRow = ROWS - 1;
+        if (grabbedRow < 0) grabbedRow = 0;
       });
 
       cvs.addEventListener('pointermove', (e) => {
@@ -623,47 +636,40 @@
         
         const rect = cvs.getBoundingClientRect();
         const scaleX = cvs.width / rect.width;
-        const scaleY = cvs.height / rect.height;
         const canvasX = (e.clientX - rect.left) * scaleX;
-        const canvasY = (e.clientY - rect.top) * scaleY;
         
-        const dx = canvasX - startX;
-        const dy = canvasY - startY;
-        const threshold = CELL_PX * 0.45; // 45%移動した段階でスワップ実行
+        // 指が現在どの列を指しているか
+        let targetCol = Math.floor(canvasX / CELL_PX);
+        if (targetCol >= COLS) targetCol = COLS - 1;
+        if (targetCol < 0) targetCol = 0;
 
-        if (Math.abs(dx) > threshold && Math.abs(dx) > Math.abs(dy)) {
-          let swapped = false;
-          if (dx > 0) {
-            // 右へスワップ
-            if (currentCellX >= 0 && currentCellX < COLS - 1) {
-              myEngine.cursor.x = currentCellX;
-              myEngine.cursor.y = currentCellY;
-              swapped = myEngine.swap(currentCellX, currentCellY);
-              currentCellX++;
-            }
-          } else {
-            // 左へスワップ
-            if (currentCellX > 0 && currentCellX < COLS) {
-              myEngine.cursor.x = currentCellX - 1;
-              myEngine.cursor.y = currentCellY;
-              swapped = myEngine.swap(currentCellX - 1, currentCellY);
-              currentCellX--;
-            }
-          }
-          
-          // 起点を更新することで連続スワップ（ドラッグ）が可能に
-          startX = canvasX;
-          startY = canvasY;
+        const continuous = document.getElementById('continuous-swipe').checked;
 
-          // カーソル位置を整える
-          if (currentCellX === COLS - 1) myEngine.cursor.x = COLS - 2;
-          else myEngine.cursor.x = currentCellX;
-
-          // 連続スワイプのトグルがOFFの場合は1回のスワップで終了
-          const continuous = document.getElementById('continuous-swipe').checked;
-          if (!continuous) {
-            isDown = false;
-          }
+        // 指の方向に、掴んだブロックを引っ張り続ける
+        while (targetCol > grabbedCol) {
+           myEngine.cursor.x = grabbedCol;
+           myEngine.cursor.y = grabbedRow;
+           // 右にスワップ
+           let swapped = myEngine.swap(grabbedCol, grabbedRow);
+           if (swapped) {
+              grabbedCol++; // 成功した時だけ対象を追従させる（巻き込み防止）
+              if (!continuous) { isDown = false; break; } // 単発設定なら1回で終了
+           } else {
+              break; // 壁や浮遊ブロック等で動かせないなら停止
+           }
+        }
+        
+        while (targetCol < grabbedCol) {
+           myEngine.cursor.x = grabbedCol - 1;
+           myEngine.cursor.y = grabbedRow;
+           // 左にスワップ
+           let swapped = myEngine.swap(grabbedCol - 1, grabbedRow);
+           if (swapped) {
+              grabbedCol--;
+              if (!continuous) { isDown = false; break; }
+           } else {
+              break;
+           }
         }
       });
 
@@ -678,14 +684,15 @@
         const canvasX = (e.clientX - rect.left) * scaleX;
         const canvasY = (e.clientY - rect.top) * scaleY;
         
-        const dx = canvasX - initialStartX;
-        const dy = canvasY - initialStartY;
+        const dx = canvasX - initialCanvasX;
+        const dy = canvasY - initialCanvasY;
         
-        // ほとんど指を動かしていない場合は「タップ」と判定しカーソルを移動
+        // 指をほとんど動かさずに離した場合は「タップ」とみなし、カーソルだけを移動
         if (Math.abs(dx) < CELL_PX * 0.3 && Math.abs(dy) < CELL_PX * 0.3) {
-          if (currentCellX >= 0 && currentCellX < COLS - 1) myEngine.cursor.x = currentCellX;
-          else if (currentCellX === COLS - 1) myEngine.cursor.x = COLS - 2;
-          myEngine.cursor.y = currentCellY;
+          let c = Math.floor(canvasX / CELL_PX);
+          if (c >= COLS - 1) c = COLS - 2; // 右端タップの調整
+          myEngine.cursor.x = c;
+          myEngine.cursor.y = grabbedRow;
         }
       });
 
