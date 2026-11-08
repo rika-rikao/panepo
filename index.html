@@ -50,30 +50,39 @@
 
     /* ゲーム画面全体 */
     #game-area {
-      display: none; width: 100vw; height: 100vh; position: relative; flex-direction: column; align-items: center; justify-content: center;
+      display: none; width: 100vw; height: 100vh; position: relative;
+      flex-direction: column; align-items: center; justify-content: center; overflow: hidden;
     }
 
     #game-container {
-      display: flex; flex-direction: row; gap: 20px; width: 100%; height: 100%; padding: 20px;
-      align-items: center; justify-content: center; flex: 1; padding-bottom: 50px; /* 下部バーのスペース */
+      display: flex; flex-direction: row; gap: 15px; width: 100%; height: 100%; padding: 10px;
+      align-items: center; justify-content: center; flex: 1;
     }
     
-    .board-wrapper { display: flex; flex-direction: column; align-items: center; }
-    .board-header { font-size: 1rem; font-weight: bold; margin-bottom: 6px; display: flex; justify-content: space-between; width: 100%; }
+    .board-wrapper { display: flex; flex-direction: column; align-items: center; z-index: 10; transition: transform 0.1s ease-out; }
+    .board-header { font-size: 0.95rem; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; width: 100%; }
     .canvas-container { border: 4px solid #3282b8; border-bottom: none; border-radius: 6px 6px 0 0; background: #000; box-shadow: 0 0 15px rgba(0,0,0,0.8); overflow: hidden; touch-action: none; }
     
-    #controls-container { display: flex; flex-direction: column; align-items: center; gap: 15px; width: 130px; }
+    /* 予告エリア */
+    .garbage-preview-box {
+      height: 24px; width: 100%; margin-bottom: 4px; display: flex; gap: 4px; align-items: center;
+      background: rgba(0,0,0,0.45); border-radius: 6px; padding: 2px 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15);
+    }
+    .preview-label { font-size: 0.7rem; color: #4ecca3; margin-right: 4px; font-weight: bold; }
+    .preview-list { display: flex; gap: 4px; align-items: center; height: 100%; overflow: hidden; }
+
+    #controls-container { display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 20; width: 110px; }
     .action-btn { background: linear-gradient(135deg, #e94560, #ff6b6b); border: none; color: #fff; font-weight: bold; padding: 12px; border-radius: 25px; width: 100%; cursor: pointer; }
     .action-btn:active { transform: scale(0.92); }
     .retire-btn { background: linear-gradient(135deg, #d90429, #ef233c); }
     
-    .switch-wrapper { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; cursor: pointer; color: #4ecca3; }
-    input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; accent-color: #e94560; }
+    .switch-wrapper { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; color: #4ecca3; }
+    input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #e94560; }
 
     /* UI配置制御 (利き手モード) */
-    .absolute-top { position: absolute; top: 15px; padding: 8px 16px; font-size: 0.9rem; width: auto; z-index: 100; font-weight: bold; border-radius: 20px; }
-    .right-handed .absolute-top { left: 15px; right: auto; }
-    .left-handed .absolute-top { right: 15px; left: auto; }
+    .absolute-top { position: absolute; top: 12px; padding: 8px 16px; font-size: 0.85rem; width: auto; z-index: 100; font-weight: bold; border-radius: 20px; }
+    .right-handed .absolute-top { left: 12px; right: auto; }
+    .left-handed .absolute-top { right: 12px; left: auto; }
 
     /* 横画面時の左右並び順 */
     .right-handed #controls-container { order: 1; }
@@ -84,30 +93,13 @@
     .left-handed #my-wrapper { order: 2; }
     .left-handed #rival-wrapper { order: 1; }
 
-    /* 縦画面レイアウト */
-    @media (orientation: portrait) {
-      #game-container { flex-direction: column !important; justify-content: center; padding-bottom: 20px; }
-      
-      #controls-container {
-        position: absolute; bottom: 70px; z-index: 20; width: 110px;
-      }
-      .right-handed #controls-container { left: 10px; right: auto; }
-      .left-handed #controls-container { right: 10px; left: auto; }
-      
-      #rival-wrapper {
-        position: absolute; top: 50px; transform: scale(0.45); z-index: 15; margin: 0 !important;
-      }
-      .right-handed #rival-wrapper { right: 10px; left: auto; transform-origin: top right; }
-      .left-handed #rival-wrapper { left: 10px; right: auto; transform-origin: top left; }
-    }
-
-    #toast { position: absolute; top: 20px; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; border: 1px solid #4ecca3; display: none; z-index: 400; font-weight: bold; }
+    #toast { position: absolute; top: 20px; background: rgba(0,0,0,0.85); padding: 10px 20px; border-radius: 20px; border: 1px solid #4ecca3; display: none; z-index: 400; font-weight: bold; }
   </style>
 </head>
 <body>
   <div id="toast"></div>
 
-  <!-- 設定画面 (タイトル画面からのみ呼び出し) -->
+  <!-- 設定画面 -->
   <div id="settings-overlay">
     <div class="settings-box">
       <h2 style="text-align: center; color: #4ecca3;">設定</h2>
@@ -149,13 +141,12 @@
 
   <!-- メニュー -->
   <div id="menu-overlay">
-    <!-- タイトル画面でのみ表示される設定ボタン -->
     <button class="small-btn" style="position: absolute; top: 15px; right: 15px; padding: 8px 16px;" onclick="openSettings()">⚙️設定</button>
 
     <div id="main-menu" style="display:flex; flex-direction:column; gap:15px; align-items:center;">
       <h1 class="title">PANEL DE WEB</h1>
       
-      <div style="font-size: 0.9rem; color: #4ecca3; display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+      <div style="font-size: 0.9rem; color: #4ecca3; display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
         <span>自分のハンデ(有利さ):</span>
         <select id="handicap-val" class="input-box" style="width: auto; padding: 5px; font-size: 0.85rem; border-radius: 10px;">
           <option value="1">1: 不利 (激ムズ)</option>
@@ -169,12 +160,17 @@
       <button class="btn" onclick="startSingleGame()">ひとりで練習</button>
       <button class="btn" onclick="showComMenu()">COMと対戦</button>
       
-      <div style="border-top:1px solid #fff; width:100%; margin:5px 0;"></div>
+      <div style="border-top:1px solid rgba(255,255,255,0.2); width:100%; margin:5px 0;"></div>
       
-      <button class="btn" onclick="createRoom()">オンライン: 部屋を作る</button>
-      <input type="text" id="peer-target-id" class="input-box" placeholder="相手のIDを入力">
-      <button class="btn" onclick="joinRoom()">オンライン: 部屋に入る</button>
-      <div id="peer-info" style="font-size:0.9rem; color:#4ecca3;"></div>
+      <!-- 短縮・合言葉対応オンライン対戦UI -->
+      <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+        <input type="text" id="peer-room-id" class="input-box" placeholder="部屋コード (空欄で自動発行)" maxlength="10">
+        <div style="display:flex; gap:10px;">
+          <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="createRoom()">部屋を作る</button>
+          <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="joinRoom()">部屋に入る</button>
+        </div>
+      </div>
+      <div id="peer-info" style="font-size:0.9rem; color:#4ecca3; text-align:center; min-height:22px;"></div>
     </div>
     
     <div id="com-menu" style="display:none; flex-direction:column; gap:15px; align-items:center;">
@@ -189,20 +185,22 @@
 
   <!-- ゲーム画面 -->
   <div id="game-area" class="right-handed">
-    <!-- 退出ボタン (絶対配置) -->
+    <!-- 退出ボタン -->
     <button id="exit-btn" class="action-btn retire-btn absolute-top" onclick="exitGame()">退出 (リタイア)</button>
 
     <div id="game-container">
       <div id="controls-container">
-        <button class="action-btn" id="rise-btn" style="height: 65px; font-size: 1.1rem; box-shadow: 0 4px #8a0c24;">PUSH UP</button>
-        <label class="switch-wrapper" style="background: rgba(0,0,0,0.6); padding: 8px; border-radius: 10px; flex-direction: column; gap: 5px;">
+        <button class="action-btn" id="rise-btn" style="height: 60px; font-size: 1.05rem; box-shadow: 0 4px #8a0c24;">PUSH UP</button>
+        <label class="switch-wrapper" style="background: rgba(0,0,0,0.65); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid rgba(255,255,255,0.1);">
           <input type="checkbox" id="continuous-swipe" checked>連続移動
         </label>
       </div>
 
       <div class="board-wrapper" id="my-wrapper">
-        <!-- おじゃま予告エリア -->
-        <div id="my-garbage-preview" style="height: 24px; width: 100%; margin-bottom: 5px; display: flex; gap: 4px; align-items: flex-end; overflow: hidden;"></div>
+        <div class="garbage-preview-box">
+          <span class="preview-label">予告</span>
+          <div id="my-garbage-preview" class="preview-list"></div>
+        </div>
         <div class="board-header">
           <span id="player-label">YOU</span>
           <span id="score-label">SCORE: 0</span>
@@ -211,8 +209,10 @@
       </div>
       
       <div class="board-wrapper" id="rival-wrapper" style="display: none;">
-        <!-- おじゃま予告エリア -->
-        <div id="rival-garbage-preview" style="height: 24px; width: 100%; margin-bottom: 5px; display: flex; gap: 4px; align-items: flex-end; overflow: hidden;"></div>
+        <div class="garbage-preview-box">
+          <span class="preview-label">予告</span>
+          <div id="rival-garbage-preview" class="preview-list"></div>
+        </div>
         <div class="board-header">
           <span style="color: #e94560;">RIVAL</span>
           <span id="rival-score-label">SCORE: 0</span>
@@ -222,8 +222,8 @@
     </div>
 
     <!-- 利き手切替トグル -->
-    <div id="bottom-bar" style="position: absolute; bottom: 15px; width: 100%; display: flex; justify-content: center; z-index: 100;">
-      <label class="switch-wrapper" style="background: rgba(0,0,0,0.8); padding: 6px 20px; border-radius: 20px; border: 1px solid #4ecca3;">
+    <div id="bottom-bar" style="position: absolute; bottom: 12px; width: 100%; display: flex; justify-content: center; z-index: 100;">
+      <label class="switch-wrapper" style="background: rgba(0,0,0,0.85); padding: 5px 18px; border-radius: 20px; border: 1px solid #4ecca3;">
         <input type="checkbox" id="handedness-toggle" onchange="toggleHandedness()"> <span id="handedness-text">右利きモード</span>
       </label>
     </div>
@@ -239,7 +239,7 @@
 
     // --- コンフィグ・BGM管理 ---
     let keyConfig = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Swap: 'Space', Rise: 'ShiftLeft' };
-    let padConfig = { Up: 12, Down: 13, Left: 14, Right: 15, Swap: 0, Rise: 5 }; // Xbox準拠
+    let padConfig = { Up: 12, Down: 13, Left: 14, Right: 15, Swap: 0, Rise: 5 };
     
     try {
       const sKey = localStorage.getItem('pdw_key');
@@ -447,7 +447,11 @@
         for (let r = 0; r < g.h; r++) {
           for (let c = 0; c < g.w; c++) {
             const actualCol = startCol + c;
-            if (this.grid[r][actualCol] !== null) { this.gameOver = true; return; }
+            if (this.grid[r][actualCol] !== null) { 
+              this.gameOver = true;
+              if (this.onStateChange) this.onStateChange('gameover');
+              return; 
+            }
             this.grid[r][actualCol] = { type: 'garbage', state: 'fall', fallY: 0, timer: 0, groupId: groupId };
           }
         }
@@ -490,6 +494,7 @@
         let needsMatchCheck = false;
         let isMoving = false;
 
+        // 消去アニメーション
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
             const b = this.grid[r][c];
@@ -508,10 +513,100 @@
           }
         }
 
+        // ★おじゃまブロック塊(グループ)単位の落下・着地判定
+        const garbageGroups = new Map();
+        for (let r = 0; r < this.rows; r++) {
+          for (let c = 0; c < this.cols; c++) {
+            const b = this.grid[r][c];
+            if (b && b.type === 'garbage' && b.groupId) {
+              if (!garbageGroups.has(b.groupId)) garbageGroups.set(b.groupId, []);
+              garbageGroups.get(b.groupId).push({ r, c, block: b });
+            }
+          }
+        }
+
+        garbageGroups.forEach((cells, groupId) => {
+          const leader = cells[0].block;
+          
+          if (leader.state === 'hover') {
+            isMoving = true;
+            leader.timer--;
+            cells.forEach(item => item.block.timer = leader.timer);
+            if (leader.timer <= 0) {
+              cells.forEach(item => { item.block.state = 'fall'; item.block.fallY = 0; });
+            }
+          }
+
+          if (leader.state === 'fall') {
+            isMoving = true;
+            // 塊の直下のどこか1つでも床や別ブロックに接触しているか？
+            let canFall = true;
+            for (const item of cells) {
+              if (item.r + 1 >= this.rows) { canFall = false; break; }
+              const below = this.grid[item.r + 1][item.c];
+              if (below !== null && below.groupId !== groupId) { canFall = false; break; }
+            }
+
+            if (!canFall) {
+              // 塊全体を着地させる (段差があってもバラバラにならず乗っかる)
+              cells.forEach(item => {
+                item.block.state = 'normal';
+                item.block.fallY = 0;
+              });
+              needsMatchCheck = true;
+            } else {
+              leader.fallY += 0.35;
+              cells.forEach(item => item.block.fallY = leader.fallY);
+              if (leader.fallY >= 1.0) {
+                // 下の行から順に1段下へ移動
+                cells.sort((a, b) => b.r - a.r);
+                for (const item of cells) {
+                  this.grid[item.r + 1][item.c] = item.block;
+                  this.grid[item.r][item.c] = null;
+                  item.block.fallY = 0;
+                  item.r += 1;
+                }
+                leader.fallY = 0;
+                // 移動直後の着地チェック
+                let hitBottom = false;
+                for (const item of cells) {
+                  if (item.r + 1 >= this.rows || (this.grid[item.r + 1][item.c] !== null && this.grid[item.r + 1][item.c].groupId !== groupId)) {
+                    hitBottom = true; break;
+                  }
+                }
+                if (hitBottom) {
+                  cells.forEach(item => {
+                    item.block.state = 'normal';
+                    item.block.fallY = 0;
+                  });
+                  needsMatchCheck = true;
+                }
+              }
+            }
+          }
+
+          if (leader.state === 'normal') {
+            // 塊全体の底面がすべて空洞になったら空中浮遊(ホバー)へ移行
+            let supported = false;
+            for (const item of cells) {
+              if (item.r + 1 >= this.rows) { supported = true; break; }
+              const below = this.grid[item.r + 1][item.c];
+              if (below !== null && below.groupId !== groupId) { supported = true; break; }
+            }
+            if (!supported) {
+              cells.forEach(item => {
+                item.block.state = 'hover';
+                item.block.timer = 10;
+              });
+            }
+          }
+        });
+
+        // 通常ブロックの落下処理
         for (let r = this.rows - 2; r >= 0; r--) {
           for (let c = 0; c < this.cols; c++) {
             const b = this.grid[r][c];
-            if (!b) continue;
+            if (!b || b.type === 'garbage') continue;
 
             if (b.state === 'hover') {
               isMoving = true; b.timer--;
@@ -691,7 +786,7 @@
       }
     }
 
-    // --- COM(AI) エンジン ---
+    // --- COM(AI) エンジン (無尽蔵せり上げ自滅修正) ---
     class ComAI {
       constructor(engine, level) {
         this.engine = engine; this.level = level;
@@ -704,6 +799,15 @@
       }
       update() {
         if (this.engine.gameOver) return;
+        
+        let maxH = 0;
+        for (let c=0; c<COLS; c++) { 
+          for (let r=0; r<ROWS; r++) { 
+            if (this.engine.grid[r][c]) { maxH = Math.max(maxH, ROWS-r); break; } 
+          } 
+        }
+        if (maxH >= 6) this.engine.isRisingManualPad = false; // 盤面が高くなったら強制OFF
+
         if (this.target) {
           this.moveTimer--;
           if (this.moveTimer <= 0) {
@@ -722,23 +826,31 @@
       }
       think() {
         this.actionTimer = this.thinkInterval;
-        this.engine.isRisingManualPad = false; // ★思考開始時にリセット(自滅バグ修正)
+        this.engine.isRisingManualPad = false;
 
         let maxH = 0;
-        for (let c=0; c<COLS; c++) { for (let r=0; r<ROWS; r++) { if (this.engine.grid[r][c]) { maxH = Math.max(maxH, ROWS-r); break; } } }
+        for (let c=0; c<COLS; c++) { 
+          for (let r=0; r<ROWS; r++) { 
+            if (this.engine.grid[r][c]) { maxH = Math.max(maxH, ROWS-r); break; } 
+          } 
+        }
+
         let bestMoves = [];
         for (let r=0; r<ROWS; r++) {
           for (let c=0; c<COLS-1; c++) {
             if (this.canSwapAndMatch(r, c)) bestMoves.push({x:c, y:r});
           }
         }
+
         if (bestMoves.length > 0) {
           this.target = bestMoves[Math.floor(Math.random() * bestMoves.length)];
           this.moveTimer = this.moveInterval;
         } else {
-          if (this.level >= 3 && maxH < ROWS - 4) {
+          // 余裕があり(5段以下)、予告キューがない時だけ安全にせり上げ
+          if (this.level >= 3 && maxH <= 5 && this.engine.garbageQueue.length === 0) {
             this.engine.isRisingManualPad = true;
           } else { 
+            this.engine.isRisingManualPad = false;
             this.target = { x: Math.floor(Math.random()*(COLS-1)), y: Math.floor(Math.random()*(ROWS-2))+2 }; 
             this.moveTimer = this.moveInterval; 
           }
@@ -766,14 +878,19 @@
       }
     }
 
-    // --- システム管理 ---
+    // --- システム管理 ＆ 勝敗状態管理 ---
     let myEngine, rivalEngine, myRenderer, rivalRenderer, comAI = null;
     let peer = null, conn = null;
     let currentMode = 'single', currentComLevel = 1;
     let rematchReady = { me: false, rival: false };
+    let isMatchOver = false; // 勝敗確定フラグ (勝者バグ防止)
     let loopId = null, syncIntervalId = null;
 
-    function showToast(msg) { const t = document.getElementById('toast'); t.innerText = msg; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000); }
+    function showToast(msg) { 
+      const t = document.getElementById('toast'); 
+      t.innerText = msg; t.style.display = 'block'; 
+      setTimeout(() => t.style.display = 'none', 3000); 
+    }
     function showComMenu() { document.getElementById('main-menu').style.display = 'none'; document.getElementById('com-menu').style.display = 'flex'; }
     function backToMainMenu() { document.getElementById('com-menu').style.display = 'none'; document.getElementById('main-menu').style.display = 'flex'; }
 
@@ -816,12 +933,14 @@
       
       setupInput();
       resetGameLogic();
+      adjustLayout();
       
       if (loopId) cancelAnimationFrame(loopId);
       loopId = requestAnimationFrame(gameLoop);
     }
 
     function resetGameLogic() {
+      isMatchOver = false;
       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
       
       myRenderer = new BoardRenderer('my-canvas'); 
@@ -830,8 +949,16 @@
       myEngine = new PonEngine(
         (state) => { 
           if (state === 'gameover') {
-            if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'win' });
-            showResultModal(currentMode === 'single' ? "GAME OVER" : "LOSE...");
+            if (isMatchOver) return;
+            isMatchOver = true;
+            if (currentMode.startsWith('online')) {
+              if (conn && conn.open) conn.send({ type: 'win' });
+              showResultModal("LOSE...");
+            } else if (currentMode === 'com') {
+              showResultModal("LOSE...");
+            } else {
+              showResultModal("GAME OVER");
+            }
           }
         },
         (w, h) => { 
@@ -843,7 +970,14 @@
       
       if (currentMode === 'com') {
         rivalEngine = new PonEngine(
-          (state) => { if (state === 'gameover') showResultModal("WIN!!"); },
+          (state) => { 
+            if (state === 'gameover') {
+              if (isMatchOver) return;
+              isMatchOver = true;
+              showResultModal("WIN!!"); 
+              if (myEngine) myEngine.gameOver = true;
+            }
+          },
           (w, h) => { myEngine.addGarbage(w, h); },
           3 
         );
@@ -853,6 +987,8 @@
       }
       
       rematchReady = { me: false, rival: false };
+      updateGarbagePreview(myEngine, 'my-garbage-preview');
+      if (rivalEngine) updateGarbagePreview(rivalEngine, 'rival-garbage-preview');
     }
 
     function startSingleGame() { 
@@ -862,7 +998,7 @@
     
     function startComGame(level) {
       document.getElementById('rival-wrapper').style.display = 'flex';
-      startGame('com', level);
+      startGame('com', level); 
     }
 
     function startOnlineGame(isGuest) {
@@ -871,7 +1007,7 @@
       
       if (syncIntervalId) clearInterval(syncIntervalId);
       syncIntervalId = setInterval(() => {
-        if (conn && conn.open && myEngine) {
+        if (conn && conn.open && myEngine && !isMatchOver) {
           conn.send({ 
             type: 'sync', grid: myEngine.grid, nextRow: myEngine.nextRow, 
             riseOffset: myEngine.riseOffset, score: myEngine.score, 
@@ -890,6 +1026,7 @@
         if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'leave' });
       }
       
+      isMatchOver = true;
       myEngine = null; rivalEngine = null; comAI = null;
       if (conn) { conn.close(); conn = null; }
       if (peer) { peer.destroy(); peer = null; }
@@ -926,6 +1063,7 @@
       if (padConfig.Rise !== null) myEngine.isRisingManualPad = padState[padConfig.Rise];
     }
 
+    // 予告表示更新
     function updateGarbagePreview(engine, containerId) {
       const container = document.getElementById(containerId);
       if (!container || !engine) return;
@@ -940,8 +1078,8 @@
         block.style.backgroundColor = '#5c636a';
         block.style.border = '1px solid #dee2e6';
         block.style.borderRadius = '2px';
-        block.style.width = `${Math.max(g.w * 6, 12)}px`;
-        block.style.height = `${Math.max(g.h * 6, 12)}px`;
+        block.style.width = `${Math.min(36, Math.max(12, g.w * 5))}px`;
+        block.style.height = `${Math.min(18, Math.max(8, g.h * 4))}px`;
         block.style.flexShrink = '0';
         container.appendChild(block);
       });
@@ -1049,31 +1187,95 @@
       });
     }
 
-    // --- オンライン対戦 (PeerJS) ---
-    function setupPeer(onOpen) {
+    // --- オンライン対戦 (PeerJS・短縮＆合言葉対応) ---
+    const PEER_PREFIX = 'pdw-26-';
+
+    function generateShortRoomCode() {
+      const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+      let res = '';
+      for (let i = 0; i < 4; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
+      return res;
+    }
+
+    function createRoom() {
+      let code = document.getElementById('peer-room-id').value.trim();
+      if (!code) {
+        code = generateShortRoomCode();
+        document.getElementById('peer-room-id').value = code;
+      }
+      const fullPeerId = PEER_PREFIX + code.toUpperCase();
+      
+      if (peer) { try { peer.destroy(); } catch(e){} }
+      peer = new Peer(fullPeerId);
+
+      peer.on('open', () => {
+        document.getElementById('peer-info').innerHTML = `部屋コード: <b style="font-size:1.3rem; color:#ff007f;">${code.toUpperCase()}</b><br>相手にこのコードを伝えてください`;
+        navigator.clipboard?.writeText(code.toUpperCase()); 
+        showToast(`部屋コード [${code.toUpperCase()}] をコピーしました！待機中...`);
+      });
+
+      peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+          showToast('そのコードの部屋は既に存在します。別のコードを入力してください');
+        } else {
+          showToast('接続エラー: ' + err.type);
+        }
+      });
+
+      peer.on('connection', (c) => { 
+        conn = c; 
+        bindConnEvents(); 
+        startOnlineGame(false); 
+      });
+    }
+
+    function joinRoom() {
+      const code = document.getElementById('peer-room-id').value.trim();
+      if (!code) { showToast('部屋コードを入力してください'); return; }
+      const targetPeerId = PEER_PREFIX + code.toUpperCase();
+
+      if (peer) { try { peer.destroy(); } catch(e){} }
       peer = new Peer();
-      peer.on('open', (id) => onOpen(id));
-      peer.on('connection', (c) => { conn = c; bindConnEvents(); startOnlineGame(false); });
+
+      peer.on('open', () => {
+        conn = peer.connect(targetPeerId);
+        conn.on('open', () => { 
+          bindConnEvents(); 
+          startOnlineGame(true); 
+        });
+        conn.on('error', () => { showToast('部屋への接続に失敗しました'); });
+      });
+
+      peer.on('error', (err) => { showToast('接続エラー: ' + err.type); });
     }
     
     function bindConnEvents() {
       conn.on('data', (data) => {
         if (data.type === 'sync') {
-          if (rivalEngine) {
+          if (rivalEngine && !isMatchOver) {
             rivalEngine.grid = data.grid; rivalEngine.nextRow = data.nextRow; 
             rivalEngine.riseOffset = data.riseOffset; rivalEngine.score = data.score;
-            if (data.garbageQueue) rivalEngine.garbageQueue = data.garbageQueue; // キューも同期
+            if (data.garbageQueue) rivalEngine.garbageQueue = data.garbageQueue;
           }
         } else if (data.type === 'garbage') {
           if (myEngine) myEngine.addGarbage(data.w, data.h); 
           showToast('おじゃまブロックが飛んできた！');
         } else if (data.type === 'win') {
-          showResultModal('WIN!!');
-          if (rivalEngine) rivalEngine.gameOver = true;
+          // 相手が負けた通知を受信 ＝ 自分の勝利確定
+          if (!isMatchOver) {
+            isMatchOver = true;
+            showResultModal('WIN!!');
+            if (myEngine) myEngine.gameOver = true; // 勝者側のせり上がりも即安全停止
+            if (rivalEngine) rivalEngine.gameOver = true;
+          }
         } else if (data.type === 'surrender') {
-          showResultModal('WIN!! (相手が退出)');
-          if (rivalEngine) rivalEngine.gameOver = true;
-          document.getElementById('result-rematch-btn').style.display = 'none';
+          if (!isMatchOver) {
+            isMatchOver = true;
+            showResultModal('WIN!! (相手が退出)');
+            if (myEngine) myEngine.gameOver = true;
+            if (rivalEngine) rivalEngine.gameOver = true;
+            document.getElementById('result-rematch-btn').style.display = 'none';
+          }
         } else if (data.type === 'rematch_req') {
           rematchReady.rival = true;
           if (rematchReady.me) {
@@ -1083,26 +1285,131 @@
             document.getElementById('result-status').innerText = '相手が再戦を希望しています！';
           }
         } else if (data.type === 'leave') {
-          document.getElementById('result-status').innerText = '相手が退出しました。';
+          if (!isMatchOver) {
+            isMatchOver = true;
+            showResultModal('相手が退出しました');
+          } else {
+            document.getElementById('result-status').innerText = '相手が退出しました。';
+          }
+          if (myEngine) myEngine.gameOver = true;
+          if (rivalEngine) rivalEngine.gameOver = true;
+          document.getElementById('result-rematch-btn').style.display = 'none';
+        }
+      });
+
+      conn.on('close', () => {
+        if (!isMatchOver) {
+          isMatchOver = true;
+          showResultModal('通信が切断されました');
+          if (myEngine) myEngine.gameOver = true;
+          if (rivalEngine) rivalEngine.gameOver = true;
           document.getElementById('result-rematch-btn').style.display = 'none';
         }
       });
     }
-    
-    function createRoom() {
-      setupPeer((id) => {
-        document.getElementById('peer-info').innerHTML = `部屋ID: <b>${id}</b><br>相手にこのIDを伝えてください`;
-        navigator.clipboard?.writeText(id); showToast('IDをコピーしました！待機中...');
-      });
-    }
-    
-    function joinRoom() {
-      const targetId = document.getElementById('peer-target-id').value.trim();
-      if (!targetId) { showToast('IDを入力してください'); return; }
-      setupPeer(() => { conn = peer.connect(targetId); conn.on('open', () => { bindConnEvents(); startOnlineGame(true); }); });
+
+    // --- 自動リサイズ・利き手・重なり防止レイアウト ---
+    function adjustLayout() {
+      const isPortrait = window.innerHeight > window.innerWidth;
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      const isLeft = document.getElementById('handedness-toggle')?.checked;
+
+      const myWrapper = document.getElementById('my-wrapper');
+      const rivalWrapper = document.getElementById('rival-wrapper');
+      const controls = document.getElementById('controls-container');
+      const exitBtn = document.getElementById('exit-btn');
+      const gameContainer = document.getElementById('game-container');
+
+      if (isPortrait) {
+        gameContainer.style.flexDirection = 'column';
+        gameContainer.style.justifyContent = 'center';
+
+        // 1. 相手の盤面 (上部に小さく表示、絶対に自分の盤面と被らない)
+        const rivalScale = Math.min(0.42, Math.max(0.28, (W * 0.28) / 224));
+        rivalWrapper.style.transform = `scale(${rivalScale})`;
+        rivalWrapper.style.position = 'absolute';
+        rivalWrapper.style.top = '10px';
+        rivalWrapper.style.margin = '0';
+        rivalWrapper.style.zIndex = '25';
+
+        if (isLeft) {
+          rivalWrapper.style.left = '10px';
+          rivalWrapper.style.right = 'auto';
+          rivalWrapper.style.transformOrigin = 'top left';
+          exitBtn.style.right = '12px';
+          exitBtn.style.left = 'auto';
+        } else {
+          rivalWrapper.style.right = '10px';
+          rivalWrapper.style.left = 'auto';
+          rivalWrapper.style.transformOrigin = 'top right';
+          exitBtn.style.left = '12px';
+          exitBtn.style.right = 'auto';
+        }
+
+        // 2. 自分の盤面サイズ調整 (上下余白に合わせてスケーリング)
+        const baseBoardH = 505;
+        const availH = H - 120; // 退出/相手盤面 + 下部バーのスペース
+        let myScale = Math.min(1.0, availH / baseBoardH);
+        
+        // 横幅がタイトなスマホ画面での自動縮小
+        if (W < 380) myScale = Math.min(myScale, (W - 80) / 224);
+        myScale = Math.max(0.68, myScale);
+
+        // 3. コントロールボタン (画面端の余白に配置し絶対被らないように自動縮小)
+        const boardRenderedW = 224 * myScale;
+        const sideSpace = Math.max(55, (W - boardRenderedW) / 2 + 15);
+        const controlScale = Math.min(1.0, Math.max(0.55, sideSpace / 110));
+
+        controls.style.position = 'absolute';
+        controls.style.bottom = '55px';
+        controls.style.width = '105px';
+        controls.style.transform = `scale(${controlScale})`;
+
+        if (isLeft) {
+          controls.style.right = '8px';
+          controls.style.left = 'auto';
+          controls.style.transformOrigin = 'bottom right';
+          myWrapper.style.transform = `scale(${myScale}) translateX(-15px)`;
+        } else {
+          controls.style.left = '8px';
+          controls.style.right = 'auto';
+          controls.style.transformOrigin = 'bottom left';
+          myWrapper.style.transform = `scale(${myScale}) translateX(15px)`;
+        }
+
+      } else {
+        // 横画面レイアウト
+        gameContainer.style.flexDirection = 'row';
+        gameContainer.style.justifyContent = 'center';
+
+        rivalWrapper.style.transform = '';
+        rivalWrapper.style.position = '';
+        rivalWrapper.style.top = '';
+        rivalWrapper.style.left = '';
+        rivalWrapper.style.right = '';
+        rivalWrapper.style.margin = '';
+        rivalWrapper.style.zIndex = '10';
+
+        myWrapper.style.transform = '';
+
+        controls.style.position = '';
+        controls.style.width = '120px';
+        controls.style.transform = '';
+        controls.style.bottom = '';
+        controls.style.left = '';
+        controls.style.right = '';
+
+        if (isLeft) {
+          exitBtn.style.right = '15px';
+          exitBtn.style.left = 'auto';
+        } else {
+          exitBtn.style.left = '15px';
+          exitBtn.style.right = 'auto';
+        }
+      }
     }
 
-    // 利き手モードの初期化
     function toggleHandedness() {
       const isLeft = document.getElementById('handedness-toggle').checked;
       const gameArea = document.getElementById('game-area');
@@ -1118,8 +1425,12 @@
         label.innerText = '右利きモード';
         localStorage.setItem('pdw_handedness', 'right');
       }
+      adjustLayout();
     }
     
+    window.addEventListener('resize', adjustLayout);
+    window.addEventListener('orientationchange', () => setTimeout(adjustLayout, 100));
+
     window.addEventListener('DOMContentLoaded', () => {
       if (localStorage.getItem('pdw_handedness') === 'left') {
         document.getElementById('handedness-toggle').checked = true;
