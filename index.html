@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#1a1a2e">
   <title>Panel de Web - パネポン風対戦パズル</title>
-  <link rel="manifest" id="manifest-link">
+  <!-- マニフェストを外部ファイル化 -->
+  <link rel="manifest" href="manifest.json">
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     :root { --bg-color: #1a1a2e; }
@@ -100,8 +101,9 @@
         <h3>🎵 音声設定</h3>
         <p style="font-size:0.8rem; color:#aaa; margin-bottom: 5px;">マイBGM（ファイルやフォルダを選択して再生）</p>
         <div style="display:flex; gap:10px; margin-bottom: 10px;">
-          <label class="small-btn">ファイル選択<input type="file" id="bgm-file-input" multiple accept="audio/*" style="display:none;"></label>
-          <label class="small-btn">フォルダ選択<input type="file" id="bgm-dir-input" multiple webkitdirectory directory accept="audio/*" style="display:none;"></label>
+          <!-- accept属性を増やしてiOS等でも選択しやすくする -->
+          <label class="small-btn">ファイル選択<input type="file" id="bgm-file-input" multiple accept="audio/*, .mp3, .m4a, .aac, .wav, .ogg, .opus, .webm" style="display:none;"></label>
+          <label class="small-btn">フォルダ選択<input type="file" id="bgm-dir-input" multiple webkitdirectory directory accept="audio/*, .mp3, .m4a, .aac, .wav, .ogg, .opus, .webm" style="display:none;"></label>
           <button class="small-btn" onclick="toggleBgmPlay()">再生 / 停止</button>
         </div>
         <div style="font-size: 0.9rem;">
@@ -159,7 +161,6 @@
       
       <div style="border-top:1px solid rgba(255,255,255,0.2); width:100%; margin:5px 0;"></div>
       
-      <!-- 短縮・合言葉対応オンライン対戦UI -->
       <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
         <input type="text" id="peer-room-id" class="input-box" placeholder="部屋コード (空欄で自動発行)" maxlength="10">
         <div style="display:flex; gap:10px;">
@@ -193,7 +194,8 @@
         <label class="switch-wrapper" style="background: rgba(0,0,0,0.65); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid rgba(255,255,255,0.1);">
           <input type="checkbox" id="continuous-swipe" checked>連続移動
         </label>
-        <button class="action-btn" id="rise-btn" style="height: 60px; font-size: 1.05rem; box-shadow: 0 4px #8a0c24;">PUSH UP</button>
+        <!-- ボタン名称を「せり上げ」に変更 -->
+        <button class="action-btn" id="rise-btn" style="height: 60px; font-size: 1.05rem; box-shadow: 0 4px #8a0c24;">せり上げ</button>
       </div>
 
       <div class="board-wrapper" id="my-wrapper">
@@ -224,66 +226,77 @@
 
   <script>
     // ==========================================
-    // PWA化設定 (Manifest & ServiceWorkerを動的生成)
+    // PWA: Service Worker登録（分離ファイル読み込み）
     // ==========================================
-    const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#1a1a2e"/><rect x="128" y="128" width="256" height="256" rx="64" fill="#ff007f"/><text x="50%" y="50%" font-size="140" font-family="sans-serif" font-weight="bold" fill="#fff" text-anchor="middle" dominant-baseline="central">P</text></svg>`;
-    const iconUrl = 'data:image/svg+xml;base64,' + btoa(svgIcon);
-
-    const manifest = {
-      name: "Panel de Web",
-      short_name: "PdeW",
-      start_url: location.href,
-      display: "standalone",
-      background_color: "#1a1a2e",
-      theme_color: "#1a1a2e",
-      icons: [{ src: iconUrl, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }]
-    };
-    const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-    document.getElementById('manifest-link').href = URL.createObjectURL(manifestBlob);
-
-    const swCode = `
-      self.addEventListener('install', e => self.skipWaiting());
-      self.addEventListener('activate', e => self.clients.claim());
-      self.addEventListener('fetch', e => {});
-    `;
-    const swBlob = new Blob([swCode], {type: 'application/javascript'});
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(err => console.log(err));
+      navigator.serviceWorker.register('sw.js').catch(err => console.error('SW Register Error:', err));
     }
 
-
     const COLS = 6, ROWS = 12, CELL_PX = 36;
+    
+    // ブロック定義（全7種類）
     const COLORS = [
       { id: 1, bg: '#ff3366', symbol: '♥' }, { id: 2, bg: '#ffd700', symbol: '★' },
       { id: 3, bg: '#00d4ff', symbol: '◆' }, { id: 4, bg: '#00e676', symbol: '♣' },
-      { id: 5, bg: '#ff9100', symbol: '▲' }
+      { id: 5, bg: '#ff9100', symbol: '▲' }, { id: 6, bg: '#9d00ff', symbol: '●' }, // 6種類目追加
+      { id: 7, bg: '#ffffff', symbol: '！', isSpecial: true, textColor: '#000' }   // 7種類目：硬いお邪魔を送る特殊ブロック
     ];
 
     // ==========================================
-    // SE (効果音) & BGM 制御
+    // SE (Web Audio API) & BGM 制御
     // ==========================================
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+
+    // iOS等での無音対策：初回タップでAudioContextをResumeする
+    document.body.addEventListener('pointerdown', () => {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }, { once: true });
+
     const SE = {
-      cursorMove: 'assets/se/cursor_move.m4a',
-      falledBlock: 'assets/se/falled_block.m4a',
-      garbageErase: 'assets/se/garbage_block_erase.m4a',
-      normalErase: 'assets/se/nomal_block_erase.m4a',
+      files: {
+        cursorMove: 'assets/se/cursor_move.m4a',
+        falledBlock: 'assets/se/falled_block.m4a',
+        garbageErase: 'assets/se/garbage_block_erase.m4a',
+        normalErase: 'assets/se/nomal_block_erase.m4a',
+      },
+      buffers: {},
       volume: 0.5,
+      async load() {
+        for (const [key, path] of Object.entries(this.files)) {
+          try {
+            const response = await fetch(path);
+            const arrayBuffer = await response.arrayBuffer();
+            const decoded = await new Promise((resolve, reject) => {
+              audioCtx.decodeAudioData(arrayBuffer, resolve, reject);
+            });
+            this.buffers[key] = decoded;
+          } catch (e) {
+            console.warn('SE Load Error:', key, e);
+          }
+        }
+      },
       play(key) {
-        if (!this[key]) return;
-        const a = new Audio(this[key]);
-        a.volume = this.volume;
-        a.play().catch(()=>{});
+        if (!this.buffers[key]) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const source = audioCtx.createBufferSource();
+        source.buffer = this.buffers[key];
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = this.volume;
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        source.start(0);
       }
     };
+    SE.load();
 
     let bgmAudio = new Audio();
     bgmAudio.loop = false;
     let bgmPlaylist = [];
     let currentBgmIndex = 0;
     let isBgmPlaying = false;
-    let bgmNeedsPlay = false; // 閉じた時に再生するフラグ
+    let bgmNeedsPlay = false; 
 
-    // ボリューム保存・復元処理
     const savedSeVol = localStorage.getItem('pdw_se_vol');
     if (savedSeVol !== null) SE.volume = parseFloat(savedSeVol);
     const savedBgmVol = localStorage.getItem('pdw_bgm_vol');
@@ -341,7 +354,6 @@
       }
     });
 
-
     // --- コンフィグ管理 ---
     let keyConfig = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Swap: 'Space', Rise: 'ShiftLeft' };
     let padConfig = { Up: 12, Down: 13, Left: 14, Right: 15, Swap: 0, Rise: 5 };
@@ -365,7 +377,6 @@
       localStorage.setItem('pdw_key', JSON.stringify(keyConfig));
       localStorage.setItem('pdw_pad', JSON.stringify(padConfig));
 
-      // BGMがセットされていて未再生なら閉じたタイミングで再生(ユーザー操作コンテキストでの実行)
       if (bgmNeedsPlay && !isBgmPlaying) {
         bgmAudio.play().then(() => {
           isBgmPlaying = true;
@@ -417,7 +428,7 @@
       constructor(onStateChange, onSendGarbage, handicap = 3, isPlayer = true) {
         this.cols = COLS; this.rows = ROWS;
         this.handicap = handicap;
-        this.isPlayer = isPlayer; // SE再生判定用
+        this.isPlayer = isPlayer; 
         this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
         this.nextRow = []; 
         this.riseOffset = 0; 
@@ -517,7 +528,8 @@
         this.checkMatches(); 
       }
 
-      addGarbage(w, h) { 
+      // isHard引数を追加（硬いお邪魔）
+      addGarbage(w, h, isHard = false) { 
         let adjustedH = h;
         if (this.handicap === 1) adjustedH = Math.floor(h * 1.5);
         else if (this.handicap === 2) adjustedH = Math.floor(h * 1.25);
@@ -525,7 +537,7 @@
         else if (this.handicap === 5) adjustedH = Math.ceil(h * 0.5);
         
         if (adjustedH < 1) adjustedH = 1;
-        this.garbageQueue.push({ w, h: adjustedH, delay: 150 }); 
+        this.garbageQueue.push({ w, h: adjustedH, delay: 150, isHard }); 
       }
 
       spawnGarbage() {
@@ -540,7 +552,7 @@
               if (this.onStateChange) this.onStateChange('gameover');
               return; 
             }
-            this.grid[r][actualCol] = { type: 'garbage', state: 'fall', fallY: 0, timer: 0, groupId: groupId };
+            this.grid[r][actualCol] = { type: 'garbage', state: 'fall', fallY: 0, timer: 0, groupId: groupId, isHard: g.isHard };
           }
         }
       }
@@ -582,24 +594,44 @@
           let didTransform = false;
           triggeredGroupIds.forEach(groupId => {
             let maxR = -1;
+            let isHardGroup = false;
+            
             for (let rr = 0; rr < this.rows; rr++) {
               for (let cc = 0; cc < this.cols; cc++) {
                 const b = this.grid[rr][cc];
                 if (b && b.type === 'garbage' && b.groupId === groupId) {
                   if (rr > maxR) maxR = rr;
+                  if (b.isHard) isHardGroup = true;
                 }
               }
             }
-            if (maxR !== -1) {
-              for (let cc = 0; cc < this.cols; cc++) {
-                const b = this.grid[maxR][cc];
-                if (b && b.type === 'garbage' && b.groupId === groupId) {
-                  b.type = COLORS[Math.floor(Math.random() * COLORS.length)].id;
-                  b.state = 'hover'; 
-                  b.timer = 15; 
-                  b.chainEligible = true; 
-                  delete b.groupId; 
-                  didTransform = true;
+            
+            if (isHardGroup) {
+              // 硬いお邪魔は普通のお邪魔にダウングレードするだけ
+              for (let rr = 0; rr < this.rows; rr++) {
+                for (let cc = 0; cc < this.cols; cc++) {
+                  const b = this.grid[rr][cc];
+                  if (b && b.type === 'garbage' && b.groupId === groupId) {
+                    b.isHard = false;
+                  }
+                }
+              }
+              didTransform = true;
+            } else {
+              // 普通のお邪魔はブロックへ変化
+              if (maxR !== -1) {
+                for (let cc = 0; cc < this.cols; cc++) {
+                  const b = this.grid[maxR][cc];
+                  if (b && b.type === 'garbage' && b.groupId === groupId) {
+                    const validIds = COLORS.filter(c => !c.isSpecial).map(c => c.id);
+                    b.type = validIds[Math.floor(Math.random() * validIds.length)];
+                    b.state = 'hover'; 
+                    b.timer = 15; 
+                    b.chainEligible = true; 
+                    delete b.groupId; 
+                    delete b.isHard;
+                    didTransform = true;
+                  }
                 }
               }
             }
@@ -812,10 +844,13 @@
           if (this.isPlayer) SE.play('normalErase');
 
           let chainActive = false;
+          let hasSpecial = false;
+
           matchedPositions.forEach(pos => {
             const [r, c] = pos.split(',').map(Number);
             const block = this.grid[r][c];
             if (block.chainEligible) chainActive = true;
+            if (COLORS.find(col => col.id === block.type)?.isSpecial) hasSpecial = true;
             block.state = 'match'; block.timer = 40;
           });
 
@@ -823,13 +858,17 @@
           this.stopTimer = 50 + (matchedPositions.size * 10) + (this.chain * 10);
           this.score += matchedPositions.size * 10 * this.chain;
 
-          if (this.onSendGarbage && (matchedPositions.size >= 4 || this.chain >= 2)) {
+          // おじゃま送信判定
+          if (this.onSendGarbage && (matchedPositions.size >= 4 || this.chain >= 2 || hasSpecial)) {
             let gw = Math.min(this.cols, 3 + (this.chain > 1 ? this.chain - 1 : 0));
             if (matchedPositions.size >= 4 && this.chain < 2) {
                gw = Math.min(this.cols, Math.max(3, matchedPositions.size - 1));
             }
+            if (hasSpecial && matchedPositions.size < 4 && this.chain < 2) {
+               gw = 3; // 特殊ブロックを3個消しした時の最低保障サイズ
+            }
             const gh = Math.max(1, this.chain - 1);
-            this.onSendGarbage(gw, gh);
+            this.onSendGarbage(gw, gh, hasSpecial); // 硬いお邪魔フラグ(hasSpecial)を付与して送信
           }
         } else {
           let isMoving = false;
@@ -870,7 +909,9 @@
               const y = r * CELL_PX - offsetY + (b.fallY * CELL_PX);
 
               if (b.type === 'garbage') {
-                ctx.fillStyle = '#5c636a'; ctx.fillRect(x, y, CELL_PX, CELL_PX);
+                // 硬いお邪魔ならシルバー系、通常はグレー系
+                ctx.fillStyle = b.isHard ? '#a8b2bd' : '#5c636a'; 
+                ctx.fillRect(x, y, CELL_PX, CELL_PX);
                 ctx.strokeStyle = '#dee2e6'; ctx.lineWidth = 2;
                 
                 const sameTop = r > 0 && engine.grid[r-1][c] && engine.grid[r-1][c].groupId === b.groupId;
@@ -892,7 +933,11 @@
                 if (conf) {
                   ctx.fillStyle = (b.state === 'match' && Math.floor(b.timer/4)%2 === 0) ? '#fff' : conf.bg;
                   ctx.beginPath(); ctx.roundRect(x+2, y+2, CELL_PX-4, CELL_PX-4, 8); ctx.fill();
-                  ctx.fillStyle = '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(conf.symbol, x+CELL_PX/2, y+CELL_PX/2);
+                  ctx.fillStyle = conf.textColor || '#fff'; 
+                  ctx.font = 'bold 16px sans-serif'; 
+                  ctx.textAlign = 'center'; 
+                  ctx.textBaseline = 'middle'; 
+                  ctx.fillText(conf.symbol, x+CELL_PX/2, y+CELL_PX/2);
                 }
               }
             }
@@ -909,7 +954,11 @@
               ctx.globalAlpha = 0.35; 
               ctx.fillStyle = conf.bg;
               ctx.beginPath(); ctx.roundRect(x+2, y+2, CELL_PX-4, CELL_PX-4, 8); ctx.fill();
-              ctx.fillStyle = '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(conf.symbol, x+CELL_PX/2, y+CELL_PX/2);
+              ctx.fillStyle = conf.textColor || '#fff'; 
+              ctx.font = 'bold 16px sans-serif'; 
+              ctx.textAlign = 'center'; 
+              ctx.textBaseline = 'middle'; 
+              ctx.fillText(conf.symbol, x+CELL_PX/2, y+CELL_PX/2);
               ctx.globalAlpha = 1.0;  
             }
           }
@@ -1074,6 +1123,8 @@
       adjustLayout();
       
       if (loopId) cancelAnimationFrame(loopId);
+      lastTime = performance.now();
+      accumulator = 0;
       loopId = requestAnimationFrame(gameLoop);
     }
 
@@ -1099,9 +1150,9 @@
             }
           }
         },
-        (w, h) => { 
-          if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'garbage', w, h });
-          else if (currentMode === 'com' && rivalEngine) rivalEngine.addGarbage(w, h);
+        (w, h, isHard) => { 
+          if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'garbage', w, h, isHard });
+          else if (currentMode === 'com' && rivalEngine) rivalEngine.addGarbage(w, h, isHard);
         },
         handicap,
         true // isPlayer
@@ -1117,7 +1168,7 @@
               if (myEngine) myEngine.gameOver = true;
             }
           },
-          (w, h) => { myEngine.addGarbage(w, h); },
+          (w, h, isHard) => { myEngine.addGarbage(w, h, isHard); },
           3,
           false // isPlayer
         );
@@ -1217,7 +1268,8 @@
       container.innerHTML = '';
       engine.garbageQueue.forEach(g => {
         const block = document.createElement('div');
-        block.style.backgroundColor = '#5c636a';
+        // 硬いお邪魔かどうかで色を変更
+        block.style.backgroundColor = g.isHard ? '#a8b2bd' : '#5c636a';
         block.style.border = '1px solid #dee2e6';
         block.style.borderRadius = '2px';
         block.style.width = `${Math.min(36, Math.max(12, g.w * 5))}px`;
@@ -1227,20 +1279,41 @@
       });
     }
 
-    function gameLoop() {
-      pollGamepadInput();
+    // 120Hz/60Hzの画面レート依存をなくすための固定時間ステップ更新ループ
+    let lastTime = 0;
+    let accumulator = 0;
+    const FIXED_TIME_STEP = 1000 / 60; // 60FPSベース
+
+    function gameLoop(time) {
+      let deltaTime = time - lastTime;
+      if (deltaTime > 100) deltaTime = 100; // タブが裏に行った時の跳躍防止
+      lastTime = time;
       
+      accumulator += deltaTime;
+      
+      // 内部ロジックを必ず60FPSのペースで回す
+      while (accumulator >= FIXED_TIME_STEP) {
+        pollGamepadInput();
+        if (myEngine) myEngine.update();
+        if (currentMode !== 'single' && rivalEngine) {
+          if (comAI) comAI.update();
+          rivalEngine.update();
+        }
+        accumulator -= FIXED_TIME_STEP;
+      }
+      
+      // 描画は毎フレーム行う
       if (myEngine) {
-        myEngine.update(); myRenderer.draw(myEngine);
+        myRenderer.draw(myEngine);
         document.getElementById('score-label').innerText = `SCORE: ${myEngine.score} | CHAIN: ${myEngine.chain}`;
         updateGarbagePreview(myEngine, 'my-garbage-preview');
       }
       if (currentMode !== 'single' && rivalEngine) {
-        if (comAI) comAI.update();
-        rivalEngine.update(); rivalRenderer.draw(rivalEngine);
+        rivalRenderer.draw(rivalEngine);
         document.getElementById('rival-score-label').innerText = `SCORE: ${rivalEngine.score}`;
         updateGarbagePreview(rivalEngine, 'rival-garbage-preview');
       }
+      
       loopId = requestAnimationFrame(gameLoop);
     }
 
@@ -1412,7 +1485,7 @@
             if (data.garbageQueue) rivalEngine.garbageQueue = data.garbageQueue;
           }
         } else if (data.type === 'garbage') {
-          if (myEngine) myEngine.addGarbage(data.w, data.h); 
+          if (myEngine) myEngine.addGarbage(data.w, data.h, data.isHard); 
           showToast('おじゃまブロックが飛んできた！');
         } else if (data.type === 'win') {
           if (!isMatchOver) {
@@ -1477,20 +1550,17 @@
       controls.style.alignItems = 'center';
 
       if (isPortrait) {
-        // 縦画面：コントロール列と自分の盤面を横並びに配置
         gameContainer.style.flexDirection = 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.paddingBottom = '0px'; 
         gameContainer.style.paddingTop = '0px';    
 
-        // 相手盤面をコントロール列の最上部に移動
         if (rivalWrapper.parentNode !== controls) {
           controls.insertBefore(rivalWrapper, controls.firstChild);
         }
         rivalWrapper.style.setProperty('order', '-1', 'important');
 
-        // コントロール列の幅に合わせて相手盤面を縮小
         const rivalScale = 110 / 224; 
         const originalRivalH = 510; 
         const scaledRivalH = originalRivalH * rivalScale;
@@ -1506,13 +1576,11 @@
         rivalWrapper.style.flexShrink = '0';
         rivalWrapper.style.marginBottom = `${scaledRivalH - originalRivalH}px`;
         
-        // コントロール列の高さと配置を最適化
         controls.style.height = '515px';
         controls.style.justifyContent = 'flex-start'; 
         const handednessToggle = document.getElementById('handedness-toggle').parentNode;
         handednessToggle.style.marginTop = 'auto';
 
-        // 自分の盤面とコントロール全体のスケール計算
         const baseBoardH = 515; 
         const availH = H - 80; 
         let myScale = Math.min(1.0, availH / baseBoardH);
@@ -1525,7 +1593,6 @@
         myWrapper.style.transformOrigin = 'center';
         controls.style.transformOrigin = 'center';
 
-        // 縮小による余白詰め
         const boardMx = (224 - 224 * myScale) / -2;
         const ctrlMx = (110 - 110 * myScale) / -2;
         const scaleMy = (baseBoardH - baseBoardH * myScale) / -2;
@@ -1546,7 +1613,6 @@
           exitBtn.style.right = 'auto';
         }
       } else {
-        // 横画面：独立した3列レイアウトへの復帰
         gameContainer.style.flexDirection = 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
