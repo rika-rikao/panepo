@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#1a1a2e">
   <title>Panel de Web - パネポン風対戦パズル</title>
-  <!-- マニフェストを外部ファイル化 -->
   <link rel="manifest" href="manifest.json">
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
@@ -101,7 +100,6 @@
         <h3>🎵 音声設定</h3>
         <p style="font-size:0.8rem; color:#aaa; margin-bottom: 5px;">マイBGM（ファイルやフォルダを選択して再生）</p>
         <div style="display:flex; gap:10px; margin-bottom: 10px;">
-          <!-- accept属性を増やしてiOS等でも選択しやすくする -->
           <label class="small-btn">ファイル選択<input type="file" id="bgm-file-input" multiple accept="audio/*, .mp3, .m4a, .aac, .wav, .ogg, .opus, .webm" style="display:none;"></label>
           <label class="small-btn">フォルダ選択<input type="file" id="bgm-dir-input" multiple webkitdirectory directory accept="audio/*, .mp3, .m4a, .aac, .wav, .ogg, .opus, .webm" style="display:none;"></label>
           <button class="small-btn" onclick="toggleBgmPlay()">再生 / 停止</button>
@@ -183,7 +181,6 @@
 
   <!-- ゲーム画面 -->
   <div id="game-area" class="right-handed">
-    <!-- 退出ボタン -->
     <button id="exit-btn" class="action-btn retire-btn absolute-top" onclick="exitGame()">退出 (リタイア)</button>
 
     <div id="game-container">
@@ -194,7 +191,6 @@
         <label class="switch-wrapper" style="background: rgba(0,0,0,0.65); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid rgba(255,255,255,0.1);">
           <input type="checkbox" id="continuous-swipe" checked>連続移動
         </label>
-        <!-- ボタン名称を「せり上げ」に変更 -->
         <button class="action-btn" id="rise-btn" style="height: 60px; font-size: 1.05rem; box-shadow: 0 4px #8a0c24;">せり上げ</button>
       </div>
 
@@ -225,9 +221,6 @@
   </div>
 
   <script>
-    // ==========================================
-    // PWA: Service Worker登録（分離ファイル読み込み）
-    // ==========================================
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(err => console.error('SW Register Error:', err));
     }
@@ -238,8 +231,8 @@
     const COLORS = [
       { id: 1, bg: '#ff3366', symbol: '♥' }, { id: 2, bg: '#ffd700', symbol: '★' },
       { id: 3, bg: '#00d4ff', symbol: '◆' }, { id: 4, bg: '#00e676', symbol: '♣' },
-      { id: 5, bg: '#ff9100', symbol: '▲' }, { id: 6, bg: '#9d00ff', symbol: '●' }, // 6種類目追加
-      { id: 7, bg: '#ffffff', symbol: '！', isSpecial: true, textColor: '#000' }   // 7種類目：硬いお邪魔を送る特殊ブロック
+      { id: 5, bg: '#ff9100', symbol: '▲' }, { id: 6, bg: '#9d00ff', symbol: '●' },
+      { id: 7, bg: '#ffffff', symbol: '！', isSpecial: true, textColor: '#000' }
     ];
 
     // ==========================================
@@ -248,7 +241,6 @@
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const audioCtx = new AudioContext();
 
-    // iOS等での無音対策：初回タップでAudioContextをResumeする
     document.body.addEventListener('pointerdown', () => {
       if (audioCtx.state === 'suspended') audioCtx.resume();
     }, { once: true });
@@ -458,25 +450,42 @@
         this.nextRow = this.createNextRow();
       }
 
+      // 重み付きランダム抽選（通常ブロック各4、！ブロック1 => 出現率1/4程度）
+      pickWeightedColor(candidateConfigs) {
+        let totalWeight = 0;
+        candidateConfigs.forEach(conf => {
+          totalWeight += conf.isSpecial ? 1 : 4;
+        });
+        let rnd = Math.random() * totalWeight;
+        for (const conf of candidateConfigs) {
+          const w = conf.isSpecial ? 1 : 4;
+          if (rnd < w) return conf.id;
+          rnd -= w;
+        }
+        return candidateConfigs[0].id;
+      }
+
       getRandomBlock(c, r, avoidMatch = true) {
-        let valid = [...COLORS].map(col => col.id);
+        let validConfigs = [...COLORS];
         if (avoidMatch) {
           if (c >= 2 && this.grid[r] && this.grid[r][c-1] && this.grid[r][c-2] && this.grid[r][c-1].type === this.grid[r][c-2].type) {
-            valid = valid.filter(t => t !== this.grid[r][c-1].type);
+            validConfigs = validConfigs.filter(conf => conf.id !== this.grid[r][c-1].type);
           }
           if (r <= this.rows - 3 && this.grid[r+1] && this.grid[r+2] && this.grid[r+1][c] && this.grid[r+2][c] && this.grid[r+1][c].type === this.grid[r+2][c].type) {
-            valid = valid.filter(t => t !== this.grid[r+1][c].type);
+            validConfigs = validConfigs.filter(conf => conf.id !== this.grid[r+1][c].type);
           }
         }
-        return { type: valid[Math.floor(Math.random() * valid.length)], state: 'normal', timer: 0, fallY: 0, chainEligible: false };
+        return { type: this.pickWeightedColor(validConfigs), state: 'normal', timer: 0, fallY: 0, chainEligible: false };
       }
 
       createNextRow() {
         const row = [];
         for (let c = 0; c < this.cols; c++) {
-          let choices = [...COLORS].map(x => x.id);
-          if (c >= 2 && row[c-1].type === row[c-2].type) choices = choices.filter(t => t !== row[c-1].type);
-          row.push({ type: choices[Math.floor(Math.random() * choices.length)], state: 'normal', timer: 0, fallY: 0, chainEligible: false });
+          let choices = [...COLORS];
+          if (c >= 2 && row[c-1].type === row[c-2].type) {
+            choices = choices.filter(conf => conf.id !== row[c-1].type);
+          }
+          row.push({ type: this.pickWeightedColor(choices), state: 'normal', timer: 0, fallY: 0, chainEligible: false });
         }
         return row;
       }
@@ -528,7 +537,6 @@
         this.checkMatches(); 
       }
 
-      // isHard引数を追加（硬いお邪魔）
       addGarbage(w, h, isHard = false) { 
         let adjustedH = h;
         if (this.handicap === 1) adjustedH = Math.floor(h * 1.5);
@@ -607,7 +615,6 @@
             }
             
             if (isHardGroup) {
-              // 硬いお邪魔は普通のお邪魔にダウングレードするだけ
               for (let rr = 0; rr < this.rows; rr++) {
                 for (let cc = 0; cc < this.cols; cc++) {
                   const b = this.grid[rr][cc];
@@ -618,13 +625,12 @@
               }
               didTransform = true;
             } else {
-              // 普通のお邪魔はブロックへ変化
               if (maxR !== -1) {
                 for (let cc = 0; cc < this.cols; cc++) {
                   const b = this.grid[maxR][cc];
                   if (b && b.type === 'garbage' && b.groupId === groupId) {
-                    const validIds = COLORS.filter(c => !c.isSpecial).map(c => c.id);
-                    b.type = validIds[Math.floor(Math.random() * validIds.length)];
+                    const validConfigs = COLORS.filter(c => !c.isSpecial);
+                    b.type = validConfigs[Math.floor(Math.random() * validConfigs.length)].id;
                     b.state = 'hover'; 
                     b.timer = 15; 
                     b.chainEligible = true; 
@@ -637,7 +643,8 @@
             }
           });
           
-          if (didTransform && this.isPlayer) {
+          // 敵のブロック消去時もSEを再生
+          if (didTransform) {
             SE.play('garbageErase');
           }
         }
@@ -668,9 +675,17 @@
               if (b.timer <= 0) {
                 this.transformGarbageNear(r, c);
                 this.grid[r][c] = null;
+                
+                // 消去したブロックの直上にある連続ブロック群に連鎖資格を付与
                 for (let ur = r - 1; ur >= 0; ur--) {
                   const ub = this.grid[ur][c];
-                  if (ub && ub.state === 'normal') { ub.state = 'hover'; ub.timer = 15; ub.chainEligible = true; }
+                  if (ub && ub.type !== 'garbage' && ub.state !== 'match') {
+                    ub.state = 'hover';
+                    ub.timer = 15;
+                    ub.chainEligible = true;
+                  } else {
+                    break;
+                  }
                 }
                 needsMatchCheck = true;
               }
@@ -741,7 +756,7 @@
                     item.block.fallY = 0;
                   });
                   needsMatchCheck = true;
-                  if (this.isPlayer) SE.play('falledBlock');
+                  SE.play('falledBlock');
                 }
               }
             }
@@ -763,34 +778,104 @@
           }
         });
 
-        // 通常ブロックの落下処理
-        for (let r = this.rows - 2; r >= 0; r--) {
-          for (let c = 0; c < this.cols; c++) {
-            const b = this.grid[r][c];
-            if (!b || b.type === 'garbage') continue;
-
-            if (b.state === 'hover') {
-              isMoving = true; b.timer--;
-              if (b.timer <= 0) { b.state = 'fall'; b.fallY = 0; }
+        // ==========================================
+        // 通常ブロックの「ひとかたまり（スタック）落下」処理
+        // ==========================================
+        for (let c = 0; c < this.cols; c++) {
+          let r = this.rows - 1;
+          while (r >= 0) {
+            // 空きマス、お邪魔、消去中のマスをスキップ
+            while (r >= 0 && (this.grid[r][c] === null || this.grid[r][c].type === 'garbage' || this.grid[r][c].state === 'match')) {
+              r--;
             }
+            if (r < 0) break;
 
-            if (b.state === 'fall') {
-              isMoving = true;
-              const below = this.grid[r+1][c];
+            // 下が空いているか判定
+            let canFallOrFloating = false;
+            if (r + 1 < this.rows) {
+              const below = this.grid[r + 1][c];
               if (below === null) {
-                b.fallY += 0.35;
-                if (b.fallY >= 1.0) {
-                  this.grid[r+1][c] = b; this.grid[r][c] = null; b.fallY -= 1.0;
-                  if (r + 2 >= this.rows || this.grid[r+2][c] !== null) {
-                    b.state = 'normal'; b.fallY = 0; needsMatchCheck = true;
-                  }
-                }
-              } else {
-                b.state = 'normal'; b.fallY = 0; needsMatchCheck = true;
+                canFallOrFloating = true;
               }
             }
-            if (b.state === 'normal' && r+1 < this.rows && this.grid[r+1][c] === null) {
-              b.state = 'hover'; b.timer = 10;
+
+            if (canFallOrFloating || this.grid[r][c].state === 'hover' || this.grid[r][c].state === 'fall') {
+              // 宙に浮いている連続ブロック群（スタック）を構築
+              let stack = [];
+              let cur = r;
+              while (cur >= 0 && this.grid[cur][c] && this.grid[cur][c].type !== 'garbage' && this.grid[cur][c].state !== 'match') {
+                stack.push({ r: cur, block: this.grid[cur][c] });
+                cur--;
+              }
+
+              const leader = stack[0].block;
+              const bottomR = stack[0].r;
+
+              if (leader.state === 'normal') {
+                leader.state = 'hover';
+                leader.timer = 12;
+              }
+
+              // スタック内のブロック状態を同期
+              for (const item of stack) {
+                item.block.state = leader.state;
+              }
+
+              if (leader.state === 'hover') {
+                isMoving = true;
+                leader.timer--;
+                for (const item of stack) item.block.timer = leader.timer;
+                if (leader.timer <= 0) {
+                  for (const item of stack) {
+                    item.block.state = 'fall';
+                    item.block.fallY = 0;
+                  }
+                }
+              } else if (leader.state === 'fall') {
+                isMoving = true;
+                let blocked = false;
+                if (bottomR + 1 >= this.rows) {
+                  blocked = true;
+                } else {
+                  const below = this.grid[bottomR + 1][c];
+                  if (below !== null && below.state !== 'fall') {
+                    blocked = true;
+                  }
+                }
+
+                if (blocked) {
+                  // スタック全員が一体となって着地
+                  for (const item of stack) {
+                    item.block.state = 'normal';
+                    item.block.fallY = 0;
+                  }
+                  needsMatchCheck = true;
+                } else {
+                  leader.fallY += 0.35;
+                  for (const item of stack) item.block.fallY = leader.fallY;
+                  
+                  if (leader.fallY >= 1.0) {
+                    // 下段から順に1マス落下移動
+                    for (const item of stack) {
+                      this.grid[item.r + 1][c] = item.block;
+                      this.grid[item.r][c] = null;
+                      item.block.fallY = 0;
+                    }
+                    if (bottomR + 2 >= this.rows || (this.grid[bottomR + 2][c] !== null && this.grid[bottomR + 2][c].state !== 'fall')) {
+                      for (const item of stack) {
+                        item.block.state = 'normal';
+                        item.block.fallY = 0;
+                      }
+                      needsMatchCheck = true;
+                    }
+                  }
+                }
+              }
+              r = cur; // スタック上部まで走査を進める
+            } else {
+              this.grid[r][c].state = 'normal';
+              this.grid[r][c].fallY = 0;
+              r--;
             }
           }
         }
@@ -841,7 +926,8 @@
         }
 
         if (matchedPositions.size > 0) {
-          if (this.isPlayer) SE.play('normalErase');
+          // 敵のブロック消去時もSEを再生
+          SE.play('normalErase');
 
           let chainActive = false;
           let hasSpecial = false;
@@ -858,17 +944,16 @@
           this.stopTimer = 50 + (matchedPositions.size * 10) + (this.chain * 10);
           this.score += matchedPositions.size * 10 * this.chain;
 
-          // おじゃま送信判定
           if (this.onSendGarbage && (matchedPositions.size >= 4 || this.chain >= 2 || hasSpecial)) {
             let gw = Math.min(this.cols, 3 + (this.chain > 1 ? this.chain - 1 : 0));
             if (matchedPositions.size >= 4 && this.chain < 2) {
                gw = Math.min(this.cols, Math.max(3, matchedPositions.size - 1));
             }
             if (hasSpecial && matchedPositions.size < 4 && this.chain < 2) {
-               gw = 3; // 特殊ブロックを3個消しした時の最低保障サイズ
+               gw = 3;
             }
             const gh = Math.max(1, this.chain - 1);
-            this.onSendGarbage(gw, gh, hasSpecial); // 硬いお邪魔フラグ(hasSpecial)を付与して送信
+            this.onSendGarbage(gw, gh, hasSpecial);
           }
         } else {
           let isMoving = false;
@@ -909,7 +994,6 @@
               const y = r * CELL_PX - offsetY + (b.fallY * CELL_PX);
 
               if (b.type === 'garbage') {
-                // 硬いお邪魔ならシルバー系、通常はグレー系
                 ctx.fillStyle = b.isHard ? '#a8b2bd' : '#5c636a'; 
                 ctx.fillRect(x, y, CELL_PX, CELL_PX);
                 ctx.strokeStyle = '#dee2e6'; ctx.lineWidth = 2;
@@ -931,9 +1015,12 @@
               } else {
                 const conf = COLORS.find(item => item.id === b.type);
                 if (conf) {
-                  ctx.fillStyle = (b.state === 'match' && Math.floor(b.timer/4)%2 === 0) ? '#fff' : conf.bg;
+                  // 消去アニメーション時はグレー（#6c757d）と元の色で交互に明滅
+                  const isFlashing = (b.state === 'match' && Math.floor(b.timer / 4) % 2 === 0);
+                  ctx.fillStyle = isFlashing ? '#6c757d' : conf.bg;
                   ctx.beginPath(); ctx.roundRect(x+2, y+2, CELL_PX-4, CELL_PX-4, 8); ctx.fill();
-                  ctx.fillStyle = conf.textColor || '#fff'; 
+                  
+                  ctx.fillStyle = isFlashing ? '#ffffff' : (conf.textColor || '#fff'); 
                   ctx.font = 'bold 16px sans-serif'; 
                   ctx.textAlign = 'center'; 
                   ctx.textBaseline = 'middle'; 
@@ -1155,7 +1242,7 @@
           else if (currentMode === 'com' && rivalEngine) rivalEngine.addGarbage(w, h, isHard);
         },
         handicap,
-        true // isPlayer
+        true
       );
       
       if (currentMode === 'com') {
@@ -1170,7 +1257,7 @@
           },
           (w, h, isHard) => { myEngine.addGarbage(w, h, isHard); },
           3,
-          false // isPlayer
+          false
         );
         comAI = new ComAI(rivalEngine, currentComLevel);
       } else if (currentMode.startsWith('online')) {
@@ -1268,7 +1355,6 @@
       container.innerHTML = '';
       engine.garbageQueue.forEach(g => {
         const block = document.createElement('div');
-        // 硬いお邪魔かどうかで色を変更
         block.style.backgroundColor = g.isHard ? '#a8b2bd' : '#5c636a';
         block.style.border = '1px solid #dee2e6';
         block.style.borderRadius = '2px';
@@ -1279,19 +1365,17 @@
       });
     }
 
-    // 120Hz/60Hzの画面レート依存をなくすための固定時間ステップ更新ループ
     let lastTime = 0;
     let accumulator = 0;
-    const FIXED_TIME_STEP = 1000 / 60; // 60FPSベース
+    const FIXED_TIME_STEP = 1000 / 60;
 
     function gameLoop(time) {
       let deltaTime = time - lastTime;
-      if (deltaTime > 100) deltaTime = 100; // タブが裏に行った時の跳躍防止
+      if (deltaTime > 100) deltaTime = 100;
       lastTime = time;
       
       accumulator += deltaTime;
       
-      // 内部ロジックを必ず60FPSのペースで回す
       while (accumulator >= FIXED_TIME_STEP) {
         pollGamepadInput();
         if (myEngine) myEngine.update();
@@ -1302,7 +1386,6 @@
         accumulator -= FIXED_TIME_STEP;
       }
       
-      // 描画は毎フレーム行う
       if (myEngine) {
         myRenderer.draw(myEngine);
         document.getElementById('score-label').innerText = `SCORE: ${myEngine.score} | CHAIN: ${myEngine.chain}`;
