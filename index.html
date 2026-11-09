@@ -1364,12 +1364,12 @@
       if (isPortrait) {
         // 縦画面：コントロール列と自分の盤面を横並びに配置
         gameContainer.style.flexDirection = 'row';
-        gameContainer.style.alignItems = 'flex-end';
+        gameContainer.style.alignItems = 'center'; // ★画面の縦中央に配置
         gameContainer.style.justifyContent = 'center';
-        gameContainer.style.paddingBottom = '30px'; 
-        gameContainer.style.paddingTop = '60px';    
+        gameContainer.style.paddingBottom = '0px'; 
+        gameContainer.style.paddingTop = '0px';    
 
-        // 相手盤面をコントロール列の最上部に移動 (DOMの調整)
+        // 相手盤面をコントロール列の最上部に移動
         if (rivalWrapper.parentNode !== controls) {
           controls.insertBefore(rivalWrapper, controls.firstChild);
         }
@@ -1388,16 +1388,24 @@
         rivalWrapper.style.zIndex = '25';
         rivalWrapper.style.width = '224px';
         rivalWrapper.style.flexShrink = '0';
-        // 縮小した分の高さをネガティブマージンで詰めることで、下のボタン群が引き上げられる
+        
+        // 縮小した分の高さをネガティブマージンで詰める
         rivalWrapper.style.marginBottom = `${scaledRivalH - originalRivalH}px`;
         
+        // ★コントロール列の高さを自分の盤面と同じにし、上（相手盤面）と下（ボタン類）に分ける
+        controls.style.height = '515px';
+        controls.style.justifyContent = 'flex-start'; 
+        
+        // ★相手盤面より下の要素（利き手スイッチ）を一番下に押し込む
+        const handednessToggle = document.getElementById('handedness-toggle').parentNode;
+        handednessToggle.style.marginTop = 'auto';
+
         // 自分の盤面とコントロール全体のスケール計算
-        const baseBoardH = 510; 
-        const availH = H - 100; // 退出ボタン用の余白確保
+        const baseBoardH = 515; 
+        const availH = H - 80; // 退出ボタン用の余白確保
         let myScale = Math.min(1.0, availH / baseBoardH);
         
-        // 盤面(224px) + コントロール(110px) + 隙間(10px) = 344px の横幅を考慮
-        const contentW = 344;
+        const contentW = 344; // 盤面(224) + コントロール(110) + 隙間(10)
         if (contentW * myScale > W - 10) {
           myScale = (W - 10) / contentW;
         }
@@ -1405,8 +1413,8 @@
         
         myWrapper.style.transform = `scale(${myScale})`;
         controls.style.transform = `scale(${myScale})`;
-        myWrapper.style.transformOrigin = 'bottom center';
-        controls.style.transformOrigin = 'bottom center';
+        myWrapper.style.transformOrigin = 'center'; // ★スケール基準を中心にして画面中央を保つ
+        controls.style.transformOrigin = 'center';
 
         // 縮小による余白詰め（ネガティブマージン）
         const boardMx = (224 - 224 * myScale) / -2;
@@ -1454,6 +1462,12 @@
         myWrapper.style.transform = '';
         myWrapper.style.margin = '0';
         myWrapper.style.transformOrigin = 'center';
+
+        // コントロール列の並び順と高さをリセット
+        controls.style.height = '';
+        controls.style.justifyContent = 'flex-end';
+        const handednessToggle = document.getElementById('handedness-toggle').parentNode;
+        handednessToggle.style.marginTop = '0';
 
         controls.style.transform = '';
         controls.style.margin = '0';
