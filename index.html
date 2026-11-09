@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a1a2e">
   <title>Panel de Web - パネポン風対戦パズル</title>
+  <link rel="manifest" id="manifest-link">
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     :root { --bg-color: #1a1a2e; }
@@ -83,15 +85,6 @@
     .right-handed .absolute-top { left: 12px; right: auto; }
     .left-handed .absolute-top { right: 12px; left: auto; }
 
-    /* 横画面時の左右並び順 */
-    .right-handed #controls-container { order: 1; }
-    .right-handed #my-wrapper { order: 2; }
-    .right-handed #rival-wrapper { order: 3; }
-    
-    .left-handed #controls-container { order: 3; }
-    .left-handed #my-wrapper { order: 2; }
-    .left-handed #rival-wrapper { order: 1; }
-
     #toast { position: absolute; top: 20px; background: rgba(0,0,0,0.85); padding: 10px 20px; border-radius: 20px; border: 1px solid #4ecca3; display: none; z-index: 400; font-weight: bold; }
   </style>
 </head>
@@ -104,15 +97,20 @@
       <h2 style="text-align: center; color: #4ecca3;">設定</h2>
       
       <div class="settings-section">
-        <h3>🎵 BGM設定</h3>
-        <p style="font-size:0.8rem; color:#aaa; margin-bottom: 10px;">ファイルやフォルダを追加して再生（リピート対応）</p>
-        <div style="display:flex; gap:10px;">
+        <h3>🎵 音声設定</h3>
+        <p style="font-size:0.8rem; color:#aaa; margin-bottom: 5px;">マイBGM（ファイルやフォルダを選択して再生）</p>
+        <div style="display:flex; gap:10px; margin-bottom: 10px;">
           <label class="small-btn">ファイル選択<input type="file" id="bgm-file-input" multiple accept="audio/*" style="display:none;"></label>
           <label class="small-btn">フォルダ選択<input type="file" id="bgm-dir-input" multiple webkitdirectory directory accept="audio/*" style="display:none;"></label>
+          <button class="small-btn" onclick="toggleBgmPlay()">再生 / 停止</button>
         </div>
-        <div style="margin-top: 10px; font-size: 0.9rem;">
-          音量: <span id="volume-val">50</span>%<br>
+        <div style="font-size: 0.9rem;">
+          BGM音量: <span id="bgm-volume-val">50</span>%<br>
           <input type="range" id="bgm-volume" min="0" max="1" step="0.05" value="0.5" style="width:100%; margin-top:5px;">
+        </div>
+        <div style="font-size: 0.9rem; margin-top: 10px;">
+          SE音量 (効果音): <span id="se-volume-val">50</span>%<br>
+          <input type="range" id="se-volume" min="0" max="1" step="0.05" value="0.5" style="width:100%; margin-top:5px;">
         </div>
       </div>
 
@@ -122,7 +120,7 @@
         <div id="key-config-list" style="display:flex; flex-direction:column; gap:8px;"></div>
       </div>
 
-      <button class="btn" style="width: 100%; margin-top: 10px;" onclick="closeSettings()">閉じる</button>
+      <button class="btn" style="width: 100%; margin-top: 10px;" onclick="closeSettings()">設定を保存して閉じる</button>
     </div>
   </div>
 
@@ -225,6 +223,35 @@
   </div>
 
   <script>
+    // ==========================================
+    // PWA化設定 (Manifest & ServiceWorkerを動的生成)
+    // ==========================================
+    const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#1a1a2e"/><rect x="128" y="128" width="256" height="256" rx="64" fill="#ff007f"/><text x="50%" y="50%" font-size="140" font-family="sans-serif" font-weight="bold" fill="#fff" text-anchor="middle" dominant-baseline="central">P</text></svg>`;
+    const iconUrl = 'data:image/svg+xml;base64,' + btoa(svgIcon);
+
+    const manifest = {
+      name: "Panel de Web",
+      short_name: "PdeW",
+      start_url: location.href,
+      display: "standalone",
+      background_color: "#1a1a2e",
+      theme_color: "#1a1a2e",
+      icons: [{ src: iconUrl, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }]
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+    document.getElementById('manifest-link').href = URL.createObjectURL(manifestBlob);
+
+    const swCode = `
+      self.addEventListener('install', e => self.skipWaiting());
+      self.addEventListener('activate', e => self.clients.claim());
+      self.addEventListener('fetch', e => {});
+    `;
+    const swBlob = new Blob([swCode], {type: 'application/javascript'});
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(err => console.log(err));
+    }
+
+
     const COLS = 6, ROWS = 12, CELL_PX = 36;
     const COLORS = [
       { id: 1, bg: '#ff3366', symbol: '♥' }, { id: 2, bg: '#ffd700', symbol: '★' },
@@ -232,7 +259,90 @@
       { id: 5, bg: '#ff9100', symbol: '▲' }
     ];
 
-    // --- コンフィグ・BGM管理 ---
+    // ==========================================
+    // SE (効果音) & BGM 制御
+    // ==========================================
+    const SE = {
+      cursorMove: 'assets/se/cursor_move.m4a',
+      falledBlock: 'assets/se/falled_block.m4a',
+      garbageErase: 'assets/se/garbage_block_erase.m4a',
+      normalErase: 'assets/se/nomal_block_erase.m4a',
+      volume: 0.5,
+      play(key) {
+        if (!this[key]) return;
+        const a = new Audio(this[key]);
+        a.volume = this.volume;
+        a.play().catch(()=>{});
+      }
+    };
+
+    let bgmAudio = new Audio();
+    bgmAudio.loop = false;
+    let bgmPlaylist = [];
+    let currentBgmIndex = 0;
+    let isBgmPlaying = false;
+    let bgmNeedsPlay = false; // 閉じた時に再生するフラグ
+
+    // ボリューム保存・復元処理
+    const savedSeVol = localStorage.getItem('pdw_se_vol');
+    if (savedSeVol !== null) SE.volume = parseFloat(savedSeVol);
+    const savedBgmVol = localStorage.getItem('pdw_bgm_vol');
+    if (savedBgmVol !== null) bgmAudio.volume = parseFloat(savedBgmVol);
+
+    document.getElementById('se-volume').value = SE.volume;
+    document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
+    document.getElementById('bgm-volume').value = bgmAudio.volume;
+    document.getElementById('bgm-volume-val').innerText = Math.floor(bgmAudio.volume * 100);
+
+    document.getElementById('se-volume').addEventListener('input', (e) => {
+      SE.volume = parseFloat(e.target.value);
+      document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
+      localStorage.setItem('pdw_se_vol', SE.volume);
+    });
+    document.getElementById('bgm-volume').addEventListener('input', (e) => {
+      bgmAudio.volume = parseFloat(e.target.value);
+      document.getElementById('bgm-volume-val').innerText = Math.floor(bgmAudio.volume * 100);
+      localStorage.setItem('pdw_bgm_vol', bgmAudio.volume);
+    });
+
+    function handleBgmFiles(files) {
+      const arr = Array.from(files).filter(f => f.type.startsWith('audio/'));
+      if (arr.length > 0) {
+        bgmPlaylist = arr;
+        currentBgmIndex = 0;
+        bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
+        bgmNeedsPlay = true;
+        showToast('BGMをセットしました。「設定を保存して閉じる」を押すと再生されます');
+      }
+    }
+    document.getElementById('bgm-file-input').addEventListener('change', e => handleBgmFiles(e.target.files));
+    document.getElementById('bgm-dir-input').addEventListener('change', e => handleBgmFiles(e.target.files));
+
+    function toggleBgmPlay() {
+      if (bgmPlaylist.length === 0) {
+        showToast('先にBGMファイルを選択してください');
+        return;
+      }
+      if (isBgmPlaying) {
+        bgmAudio.pause();
+        isBgmPlaying = false;
+      } else {
+        bgmAudio.play().then(() => {
+          isBgmPlaying = true;
+          bgmNeedsPlay = false;
+        }).catch(e => showToast('再生エラー'));
+      }
+    }
+    bgmAudio.addEventListener('ended', () => {
+      currentBgmIndex = (currentBgmIndex + 1) % bgmPlaylist.length;
+      if (bgmPlaylist.length > 0) {
+        bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
+        bgmAudio.play().catch(()=>{});
+      }
+    });
+
+
+    // --- コンフィグ管理 ---
     let keyConfig = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Swap: 'Space', Rise: 'ShiftLeft' };
     let padConfig = { Up: 12, Down: 13, Left: 14, Right: 15, Swap: 0, Rise: 5 };
     
@@ -244,31 +354,6 @@
     } catch(e) {}
 
     let assigningAction = null, assignType = null;
-    const bgmAudio = new Audio();
-    let bgmPlaylist = [], currentBgmIndex = 0;
-
-    document.getElementById('bgm-volume').addEventListener('input', (e) => {
-      bgmAudio.volume = e.target.value;
-      document.getElementById('volume-val').innerText = Math.floor(e.target.value * 100);
-    });
-
-    function handleBgmFiles(files) {
-      bgmPlaylist = Array.from(files).filter(f => f.type.startsWith('audio/'));
-      currentBgmIndex = 0;
-      if (bgmPlaylist.length > 0) playBgmTrack();
-    }
-    document.getElementById('bgm-file-input').addEventListener('change', e => handleBgmFiles(e.target.files));
-    document.getElementById('bgm-dir-input').addEventListener('change', e => handleBgmFiles(e.target.files));
-    
-    function playBgmTrack() {
-      if (bgmPlaylist.length === 0) return;
-      bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
-      bgmAudio.play().catch(e => showToast('BGMの自動再生がブロックされました'));
-    }
-    bgmAudio.addEventListener('ended', () => {
-      currentBgmIndex = (currentBgmIndex + 1) % bgmPlaylist.length;
-      playBgmTrack();
-    });
 
     function openSettings() { 
       document.getElementById('settings-overlay').style.display = 'flex'; 
@@ -279,6 +364,14 @@
       assigningAction = null;
       localStorage.setItem('pdw_key', JSON.stringify(keyConfig));
       localStorage.setItem('pdw_pad', JSON.stringify(padConfig));
+
+      // BGMがセットされていて未再生なら閉じたタイミングで再生(ユーザー操作コンテキストでの実行)
+      if (bgmNeedsPlay && !isBgmPlaying) {
+        bgmAudio.play().then(() => {
+          isBgmPlaying = true;
+          bgmNeedsPlay = false;
+        }).catch(e => console.log(e));
+      }
     }
 
     function renderConfigUI() {
@@ -321,9 +414,10 @@
 
     // --- ゲームエンジン ---
     class PonEngine {
-      constructor(onStateChange, onSendGarbage, handicap = 3) {
+      constructor(onStateChange, onSendGarbage, handicap = 3, isPlayer = true) {
         this.cols = COLS; this.rows = ROWS;
         this.handicap = handicap;
+        this.isPlayer = isPlayer; // SE再生判定用
         this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
         this.nextRow = []; 
         this.riseOffset = 0; 
@@ -431,7 +525,6 @@
         else if (this.handicap === 5) adjustedH = Math.ceil(h * 0.5);
         
         if (adjustedH < 1) adjustedH = 1;
-        // 予告が出てから実際に降るまでのディレイ(150フレーム=約2.5秒)を追加
         this.garbageQueue.push({ w, h: adjustedH, delay: 150 }); 
       }
 
@@ -455,7 +548,6 @@
       transformGarbageNear(r, c) {
         let triggeredGroupIds = new Set();
         
-        // 最初の着火元を探索
         [[r-1,c],[r+1,c],[r,c-1],[r,c+1]].forEach(([nr, nc]) => {
           if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols) {
             const b = this.grid[nr][nc];
@@ -464,7 +556,6 @@
         });
 
         if (triggeredGroupIds.size > 0) {
-          // 隣接するお邪魔ブロックの連鎖着火（誘爆）
           let newlyAdded = true;
           while (newlyAdded) {
             newlyAdded = false;
@@ -472,7 +563,6 @@
               for (let cc = 0; cc < this.cols; cc++) {
                 const b = this.grid[rr][cc];
                 if (b && b.type === 'garbage' && triggeredGroupIds.has(b.groupId)) {
-                  // 隣接マスをチェック
                   [[rr-1,cc],[rr+1,cc],[rr,cc-1],[rr,cc+1]].forEach(([nr, nc]) => {
                     if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols) {
                       const adjB = this.grid[nr][nc];
@@ -489,7 +579,7 @@
             }
           }
 
-          // 各グループごとに「一番下の段」だけを通常ブロックに変換
+          let didTransform = false;
           triggeredGroupIds.forEach(groupId => {
             let maxR = -1;
             for (let rr = 0; rr < this.rows; rr++) {
@@ -509,10 +599,15 @@
                   b.timer = 15; 
                   b.chainEligible = true; 
                   delete b.groupId; 
+                  didTransform = true;
                 }
               }
             }
           });
+          
+          if (didTransform && this.isPlayer) {
+            SE.play('garbageErase');
+          }
         }
       }
 
@@ -614,6 +709,7 @@
                     item.block.fallY = 0;
                   });
                   needsMatchCheck = true;
+                  if (this.isPlayer) SE.play('falledBlock');
                 }
               }
             }
@@ -713,6 +809,8 @@
         }
 
         if (matchedPositions.size > 0) {
+          if (this.isPlayer) SE.play('normalErase');
+
           let chainActive = false;
           matchedPositions.forEach(pos => {
             const [r, c] = pos.split(',').map(Number);
@@ -1005,7 +1103,8 @@
           if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'garbage', w, h });
           else if (currentMode === 'com' && rivalEngine) rivalEngine.addGarbage(w, h);
         },
-        handicap
+        handicap,
+        true // isPlayer
       );
       
       if (currentMode === 'com') {
@@ -1019,11 +1118,12 @@
             }
           },
           (w, h) => { myEngine.addGarbage(w, h); },
-          3 
+          3,
+          false // isPlayer
         );
         comAI = new ComAI(rivalEngine, currentComLevel);
       } else if (currentMode.startsWith('online')) {
-        rivalEngine = new PonEngine(null, null, 3);
+        rivalEngine = new PonEngine(null, null, 3, false);
       }
       
       rematchReady = { me: false, rival: false };
@@ -1095,10 +1195,13 @@
 
       if (!myEngine || myEngine.gameOver) return;
 
-      if (padConfig.Up !== null && justPressed(padConfig.Up) && myEngine.cursor.y > 0) myEngine.cursor.y--;
-      if (padConfig.Down !== null && justPressed(padConfig.Down) && myEngine.cursor.y < ROWS - 1) myEngine.cursor.y++;
-      if (padConfig.Left !== null && justPressed(padConfig.Left) && myEngine.cursor.x > 0) myEngine.cursor.x--;
-      if (padConfig.Right !== null && justPressed(padConfig.Right) && myEngine.cursor.x < COLS - 2) myEngine.cursor.x++;
+      let moved = false;
+      if (padConfig.Up !== null && justPressed(padConfig.Up) && myEngine.cursor.y > 0) { myEngine.cursor.y--; moved = true; }
+      if (padConfig.Down !== null && justPressed(padConfig.Down) && myEngine.cursor.y < ROWS - 1) { myEngine.cursor.y++; moved = true; }
+      if (padConfig.Left !== null && justPressed(padConfig.Left) && myEngine.cursor.x > 0) { myEngine.cursor.x--; moved = true; }
+      if (padConfig.Right !== null && justPressed(padConfig.Right) && myEngine.cursor.x < COLS - 2) { myEngine.cursor.x++; moved = true; }
+      
+      if (moved) SE.play('cursorMove');
       if (padConfig.Swap !== null && justPressed(padConfig.Swap)) myEngine.swap(myEngine.cursor.x, myEngine.cursor.y);
       if (padConfig.Rise !== null) myEngine.isRisingManualPad = padState[padConfig.Rise];
     }
@@ -1169,6 +1272,7 @@
         while (targetCol > grabbedCol) {
            myEngine.cursor.x = grabbedCol; myEngine.cursor.y = grabbedRow;
            if (myEngine.swap(grabbedCol, grabbedRow)) {
+              SE.play('cursorMove');
               grabbedCol++;
               if (!continuous) { isDown = false; break; }
            } else break;
@@ -1176,6 +1280,7 @@
         while (targetCol < grabbedCol) {
            myEngine.cursor.x = grabbedCol - 1; myEngine.cursor.y = grabbedRow;
            if (myEngine.swap(grabbedCol - 1, grabbedRow)) {
+              SE.play('cursorMove');
               grabbedCol--;
               if (!continuous) { isDown = false; break; }
            } else break;
@@ -1192,7 +1297,13 @@
         if (Math.abs(canvasX - initialCanvasX) < CELL_PX * 0.3 && Math.abs(canvasY - initialCanvasY) < CELL_PX * 0.3) {
           let c = Math.floor(canvasX / CELL_PX);
           if (c >= COLS - 1) c = COLS - 2;
-          if (myEngine) { myEngine.cursor.x = c; myEngine.cursor.y = grabbedRow; }
+          if (myEngine) {
+            if (myEngine.cursor.x !== c || myEngine.cursor.y !== grabbedRow) {
+              SE.play('cursorMove');
+            }
+            myEngine.cursor.x = c; 
+            myEngine.cursor.y = grabbedRow; 
+          }
         }
       });
       cvs.addEventListener('pointercancel', () => { isDown = false; });
@@ -1213,10 +1324,14 @@
         }
         if (!myEngine || myEngine.gameOver) return;
         const code = e.code;
-        if (code === keyConfig.Up) { e.preventDefault(); if (myEngine.cursor.y > 0) myEngine.cursor.y--; }
-        if (code === keyConfig.Down) { e.preventDefault(); if (myEngine.cursor.y < ROWS - 1) myEngine.cursor.y++; }
-        if (code === keyConfig.Left) { e.preventDefault(); if (myEngine.cursor.x > 0) myEngine.cursor.x--; }
-        if (code === keyConfig.Right) { e.preventDefault(); if (myEngine.cursor.x < COLS - 2) myEngine.cursor.x++; }
+        let moved = false;
+        
+        if (code === keyConfig.Up) { e.preventDefault(); if (myEngine.cursor.y > 0) { myEngine.cursor.y--; moved = true; } }
+        if (code === keyConfig.Down) { e.preventDefault(); if (myEngine.cursor.y < ROWS - 1) { myEngine.cursor.y++; moved = true; } }
+        if (code === keyConfig.Left) { e.preventDefault(); if (myEngine.cursor.x > 0) { myEngine.cursor.x--; moved = true; } }
+        if (code === keyConfig.Right) { e.preventDefault(); if (myEngine.cursor.x < COLS - 2) { myEngine.cursor.x++; moved = true; } }
+        
+        if (moved) SE.play('cursorMove');
         if (code === keyConfig.Swap) { e.preventDefault(); myEngine.swap(myEngine.cursor.x, myEngine.cursor.y); }
         if (code === keyConfig.Rise) { e.preventDefault(); myEngine.isRisingManualKey = true; }
       });
@@ -1364,7 +1479,7 @@
       if (isPortrait) {
         // 縦画面：コントロール列と自分の盤面を横並びに配置
         gameContainer.style.flexDirection = 'row';
-        gameContainer.style.alignItems = 'center'; // ★画面の縦中央に配置
+        gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.paddingBottom = '0px'; 
         gameContainer.style.paddingTop = '0px';    
@@ -1373,11 +1488,9 @@
         if (rivalWrapper.parentNode !== controls) {
           controls.insertBefore(rivalWrapper, controls.firstChild);
         }
-
-        // ★ 横画面用のCSSのorder設定が効いてしまうのを防ぐため、強制的に一番上（-1）にする
         rivalWrapper.style.setProperty('order', '-1', 'important');
 
-        // コントロール列の幅(110px)に合わせて相手盤面を縮小
+        // コントロール列の幅に合わせて相手盤面を縮小
         const rivalScale = 110 / 224; 
         const originalRivalH = 510; 
         const scaledRivalH = originalRivalH * rivalScale;
@@ -1391,40 +1504,31 @@
         rivalWrapper.style.zIndex = '25';
         rivalWrapper.style.width = '224px';
         rivalWrapper.style.flexShrink = '0';
-        
-        // 縮小した分の高さをネガティブマージンで詰める
         rivalWrapper.style.marginBottom = `${scaledRivalH - originalRivalH}px`;
         
-        // コントロール列の高さを自分の盤面と同じにし、上（相手盤面）と下（ボタン類）に分ける
+        // コントロール列の高さと配置を最適化
         controls.style.height = '515px';
         controls.style.justifyContent = 'flex-start'; 
-        
-        // 相手盤面より下の要素（利き手スイッチ）を一番下に押し込む
         const handednessToggle = document.getElementById('handedness-toggle').parentNode;
         handednessToggle.style.marginTop = 'auto';
 
         // 自分の盤面とコントロール全体のスケール計算
         const baseBoardH = 515; 
-        const availH = H - 80; // 退出ボタン用の余白確保
+        const availH = H - 80; 
         let myScale = Math.min(1.0, availH / baseBoardH);
-        
-        const contentW = 344; // 盤面(224) + コントロール(110) + 隙間(10)
-        if (contentW * myScale > W - 10) {
-          myScale = (W - 10) / contentW;
-        }
+        const contentW = 344;
+        if (contentW * myScale > W - 10) myScale = (W - 10) / contentW;
         myScale = Math.max(0.4, myScale);
         
         myWrapper.style.transform = `scale(${myScale})`;
         controls.style.transform = `scale(${myScale})`;
-        myWrapper.style.transformOrigin = 'center'; // スケール基準を中心にして画面中央を保つ
+        myWrapper.style.transformOrigin = 'center';
         controls.style.transformOrigin = 'center';
 
-        // ★ 縮小による余白詰め（上下左右のネガティブマージン）
-        // これにより、縦方向に発生する「見えない余白」がなくなり中央配置が担保されます。
+        // 縮小による余白詰め
         const boardMx = (224 - 224 * myScale) / -2;
         const ctrlMx = (110 - 110 * myScale) / -2;
         const scaleMy = (baseBoardH - baseBoardH * myScale) / -2;
-        
         myWrapper.style.margin = `${scaleMy}px ${boardMx}px`;
         controls.style.margin = `${scaleMy}px ${ctrlMx}px`;
         
@@ -1449,12 +1553,7 @@
         gameContainer.style.paddingBottom = '10px';
         gameContainer.style.paddingTop = '10px';
 
-        // 相手盤面を元の場所 (game-container直下) に戻す
-        if (rivalWrapper.parentNode === controls) {
-          gameContainer.appendChild(rivalWrapper);
-        }
-
-        // ★ 強制的に上書きした order をリセット
+        if (rivalWrapper.parentNode === controls) gameContainer.appendChild(rivalWrapper);
         rivalWrapper.style.removeProperty('order');
 
         rivalWrapper.style.transform = '';
@@ -1472,7 +1571,6 @@
         myWrapper.style.margin = '0';
         myWrapper.style.transformOrigin = 'center';
 
-        // コントロール列の並び順と高さをリセット
         controls.style.height = '';
         controls.style.justifyContent = 'flex-end';
         const handednessToggle = document.getElementById('handedness-toggle').parentNode;
