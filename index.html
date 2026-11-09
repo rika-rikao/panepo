@@ -61,10 +61,24 @@
       align-items: center; justify-content: center; flex: 1;
     }
     
-    .board-wrapper { display: flex; flex-direction: column; align-items: center; z-index: 10; transition: transform 0.1s ease-out; }
+    .board-wrapper {
+      display: flex; flex-direction: column; align-items: center; z-index: 10;
+      transition: transform 0.1s ease-out, border 0.2s, box-shadow 0.2s;
+      position: relative;
+    }
     .board-header { font-size: 0.95rem; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; width: 100%; }
     .canvas-container { border: 4px solid #3282b8; border-bottom: none; border-radius: 6px 6px 0 0; background: #000; box-shadow: 0 0 15px rgba(0,0,0,0.8); overflow: hidden; touch-action: none; }
     
+    /* ターゲット枠線とバッジ */
+    .rival-board { cursor: pointer; border-radius: 8px; padding: 2px; }
+    .rival-board.targeted .canvas-container { border-color: #ff007f !important; box-shadow: 0 0 18px #ff007f !important; }
+    .target-badge {
+      display: none; background: #ff007f; color: #fff; font-size: 0.7rem; font-weight: 900;
+      padding: 1px 6px; border-radius: 10px; animation: pulse 0.8s infinite alternate;
+    }
+    .rival-board.targeted .target-badge { display: inline-block; }
+    @keyframes pulse { from { transform: scale(0.95); opacity: 0.8; } to { transform: scale(1.1); opacity: 1; } }
+
     /* 予告エリア */
     .garbage-preview-box {
       height: 24px; width: 100%; margin-bottom: 4px; display: flex; gap: 4px; align-items: center;
@@ -160,7 +174,7 @@
       <div style="border-top:1px solid rgba(255,255,255,0.2); width:100%; margin:5px 0;"></div>
       
       <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
-        <input type="text" id="peer-room-id" class="input-box" placeholder="部屋コード (空欄で自動発行)" maxlength="10">
+        <input type="text" id="peer-room-id" class="input-box" placeholder="部屋コード (最大4人)" maxlength="10">
         <div style="display:flex; gap:10px;">
           <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="createRoom()">部屋を作る</button>
           <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="joinRoom()">部屋に入る</button>
@@ -169,8 +183,17 @@
       <div id="peer-info" style="font-size:0.9rem; color:#4ecca3; text-align:center; min-height:22px;"></div>
     </div>
     
-    <div id="com-menu" style="display:none; flex-direction:column; gap:15px; align-items:center;">
-      <h2 style="color:#4ecca3">CPUレベル選択</h2>
+    <!-- COM対戦設定メニュー -->
+    <div id="com-menu" style="display:none; flex-direction:column; gap:12px; align-items:center;">
+      <h2 style="color:#4ecca3">CPU対戦設定</h2>
+      <div style="font-size:0.9rem; color:#4ecca3; display:flex; align-items:center; gap:8px;">
+        <span>対戦人数:</span>
+        <select id="com-player-count" class="input-box" style="width: auto; padding: 5px; font-size: 0.85rem; border-radius: 10px;">
+          <option value="2" selected>2人対戦 (1 vs 1)</option>
+          <option value="3">3人対戦 (1 vs 2)</option>
+          <option value="4">4人対戦 (1 vs 3)</option>
+        </select>
+      </div>
       <button class="btn" onclick="startComGame(1)">Level 1 (やさしい)</button>
       <button class="btn" onclick="startComGame(2)">Level 2 (ふつう)</button>
       <button class="btn" onclick="startComGame(3)">Level 3 (むずかしい)</button>
@@ -194,6 +217,7 @@
         <button class="action-btn" id="rise-btn" style="height: 60px; font-size: 1.05rem; box-shadow: 0 4px #8a0c24;">せり上げ</button>
       </div>
 
+      <!-- プレイヤー盤面 -->
       <div class="board-wrapper" id="my-wrapper">
         <div class="garbage-preview-box">
           <span class="preview-label">予告</span>
@@ -206,17 +230,8 @@
         <div class="canvas-container"><canvas id="my-canvas"></canvas></div>
       </div>
       
-      <div class="board-wrapper" id="rival-wrapper" style="display: none;">
-        <div class="garbage-preview-box">
-          <span class="preview-label">予告</span>
-          <div id="rival-garbage-preview" class="preview-list"></div>
-        </div>
-        <div class="board-header">
-          <span style="color: #e94560;">RIVAL</span>
-          <span id="rival-score-label">SCORE: 0</span>
-        </div>
-        <div class="canvas-container"><canvas id="rival-canvas"></canvas></div>
-      </div>
+      <!-- 相手盤面エリア（最大3人） -->
+      <div id="rivals-area" style="display: none; gap: 10px; align-items: center; justify-content: center;"></div>
     </div>
   </div>
 
@@ -227,7 +242,6 @@
 
     const COLS = 6, ROWS = 12, CELL_PX = 36;
     
-    // ブロック定義（全7種類）
     const COLORS = [
       { id: 1, bg: '#ff3366', symbol: '♥' }, { id: 2, bg: '#ffd700', symbol: '★' },
       { id: 3, bg: '#00d4ff', symbol: '◆' }, { id: 4, bg: '#00e676', symbol: '♣' },
@@ -236,7 +250,7 @@
     ];
 
     // ==========================================
-    // SE (Web Audio API) & BGM 制御
+    // SE & BGM 制御 (Web Audio API)
     // ==========================================
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const audioCtx = new AudioContext();
@@ -284,10 +298,7 @@
 
     let bgmAudio = new Audio();
     bgmAudio.loop = false;
-    let bgmPlaylist = [];
-    let currentBgmIndex = 0;
-    let isBgmPlaying = false;
-    let bgmNeedsPlay = false; 
+    let bgmPlaylist = [], currentBgmIndex = 0, isBgmPlaying = false, bgmNeedsPlay = false;
 
     const savedSeVol = localStorage.getItem('pdw_se_vol');
     if (savedSeVol !== null) SE.volume = parseFloat(savedSeVol);
@@ -324,18 +335,11 @@
     document.getElementById('bgm-dir-input').addEventListener('change', e => handleBgmFiles(e.target.files));
 
     function toggleBgmPlay() {
-      if (bgmPlaylist.length === 0) {
-        showToast('先にBGMファイルを選択してください');
-        return;
-      }
+      if (bgmPlaylist.length === 0) { showToast('先にBGMファイルを選択してください'); return; }
       if (isBgmPlaying) {
-        bgmAudio.pause();
-        isBgmPlaying = false;
+        bgmAudio.pause(); isBgmPlaying = false;
       } else {
-        bgmAudio.play().then(() => {
-          isBgmPlaying = true;
-          bgmNeedsPlay = false;
-        }).catch(e => showToast('再生エラー'));
+        bgmAudio.play().then(() => { isBgmPlaying = true; bgmNeedsPlay = false; }).catch(() => showToast('再生エラー'));
       }
     }
     bgmAudio.addEventListener('ended', () => {
@@ -346,13 +350,12 @@
       }
     });
 
-    // --- コンフィグ管理 ---
-    let keyConfig = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Swap: 'Space', Rise: 'ShiftLeft' };
-    let padConfig = { Up: 12, Down: 13, Left: 14, Right: 15, Swap: 0, Rise: 5 };
+    // --- コンフィグ管理（Targetアクションを追加） ---
+    let keyConfig = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Swap: 'Space', Rise: 'ShiftLeft', Target: 'KeyE' };
+    let padConfig = { Up: 12, Down: 13, Left: 14, Right: 15, Swap: 0, Rise: 5, Target: 4 }; // 4 = L1/LB
     
     try {
-      const sKey = localStorage.getItem('pdw_key');
-      const sPad = localStorage.getItem('pdw_pad');
+      const sKey = localStorage.getItem('pdw_key'), sPad = localStorage.getItem('pdw_pad');
       if (sKey) keyConfig = { ...keyConfig, ...JSON.parse(sKey) };
       if (sPad) padConfig = { ...padConfig, ...JSON.parse(sPad) };
     } catch(e) {}
@@ -370,10 +373,7 @@
       localStorage.setItem('pdw_pad', JSON.stringify(padConfig));
 
       if (bgmNeedsPlay && !isBgmPlaying) {
-        bgmAudio.play().then(() => {
-          isBgmPlaying = true;
-          bgmNeedsPlay = false;
-        }).catch(e => console.log(e));
+        bgmAudio.play().then(() => { isBgmPlaying = true; bgmNeedsPlay = false; }).catch(e => console.log(e));
       }
     }
 
@@ -387,7 +387,7 @@
         const lbl = document.createElement('span'); lbl.innerText = action; lbl.style.width = '50px'; lbl.style.fontSize = '0.9rem';
         
         const kBtn = document.createElement('button'); kBtn.className = 'config-btn';
-        kBtn.innerText = `Key: ${keyConfig[action].replace('Arrow','')}`;
+        kBtn.innerText = `Key: ${keyConfig[action].replace('Arrow','').replace('Key','')}`;
         kBtn.onclick = () => { assigningAction = action; assignType = 'key'; kBtn.innerText = '押してください'; };
         
         const pBtn = document.createElement('button'); pBtn.className = 'config-btn';
@@ -415,7 +415,9 @@
     }, 1000 / 30);
 
 
-    // --- ゲームエンジン ---
+    // ==========================================
+    // ゲームエンジン
+    // ==========================================
     class PonEngine {
       constructor(onStateChange, onSendGarbage, handicap = 3, isPlayer = true) {
         this.cols = COLS; this.rows = ROWS;
@@ -450,11 +452,10 @@
         this.nextRow = this.createNextRow();
       }
 
-      // 重み付きランダム抽選（通常ブロック各4、！ブロック1 => 出現率1/4程度）
       pickWeightedColor(candidateConfigs) {
         let totalWeight = 0;
         candidateConfigs.forEach(conf => {
-          totalWeight += conf.isSpecial ? 1 : 4;
+          totalWeight += conf.isSpecial ? 1 : 4; // ！ブロックは他ブロックの1/4頻度
         });
         let rnd = Math.random() * totalWeight;
         for (const conf of candidateConfigs) {
@@ -643,10 +644,7 @@
             }
           });
           
-          // 敵のブロック消去時もSEを再生
-          if (didTransform) {
-            SE.play('garbageErase');
-          }
+          if (didTransform) SE.play('garbageErase');
         }
       }
 
@@ -676,7 +674,6 @@
                 this.transformGarbageNear(r, c);
                 this.grid[r][c] = null;
                 
-                // 消去したブロックの直上にある連続ブロック群に連鎖資格を付与
                 for (let ur = r - 1; ur >= 0; ur--) {
                   const ub = this.grid[ur][c];
                   if (ub && ub.type !== 'garbage' && ub.state !== 'match') {
@@ -778,29 +775,22 @@
           }
         });
 
-        // ==========================================
         // 通常ブロックの「ひとかたまり（スタック）落下」処理
-        // ==========================================
         for (let c = 0; c < this.cols; c++) {
           let r = this.rows - 1;
           while (r >= 0) {
-            // 空きマス、お邪魔、消去中のマスをスキップ
             while (r >= 0 && (this.grid[r][c] === null || this.grid[r][c].type === 'garbage' || this.grid[r][c].state === 'match')) {
               r--;
             }
             if (r < 0) break;
 
-            // 下が空いているか判定
             let canFallOrFloating = false;
             if (r + 1 < this.rows) {
               const below = this.grid[r + 1][c];
-              if (below === null) {
-                canFallOrFloating = true;
-              }
+              if (below === null) canFallOrFloating = true;
             }
 
             if (canFallOrFloating || this.grid[r][c].state === 'hover' || this.grid[r][c].state === 'fall') {
-              // 宙に浮いている連続ブロック群（スタック）を構築
               let stack = [];
               let cur = r;
               while (cur >= 0 && this.grid[cur][c] && this.grid[cur][c].type !== 'garbage' && this.grid[cur][c].state !== 'match') {
@@ -816,62 +806,45 @@
                 leader.timer = 12;
               }
 
-              // スタック内のブロック状態を同期
-              for (const item of stack) {
-                item.block.state = leader.state;
-              }
+              for (const item of stack) item.block.state = leader.state;
 
               if (leader.state === 'hover') {
                 isMoving = true;
                 leader.timer--;
                 for (const item of stack) item.block.timer = leader.timer;
                 if (leader.timer <= 0) {
-                  for (const item of stack) {
-                    item.block.state = 'fall';
-                    item.block.fallY = 0;
-                  }
+                  for (const item of stack) { item.block.state = 'fall'; item.block.fallY = 0; }
                 }
               } else if (leader.state === 'fall') {
                 isMoving = true;
                 let blocked = false;
-                if (bottomR + 1 >= this.rows) {
-                  blocked = true;
-                } else {
+                if (bottomR + 1 >= this.rows) blocked = true;
+                else {
                   const below = this.grid[bottomR + 1][c];
-                  if (below !== null && below.state !== 'fall') {
-                    blocked = true;
-                  }
+                  if (below !== null && below.state !== 'fall') blocked = true;
                 }
 
                 if (blocked) {
-                  // スタック全員が一体となって着地
-                  for (const item of stack) {
-                    item.block.state = 'normal';
-                    item.block.fallY = 0;
-                  }
+                  for (const item of stack) { item.block.state = 'normal'; item.block.fallY = 0; }
                   needsMatchCheck = true;
                 } else {
                   leader.fallY += 0.35;
                   for (const item of stack) item.block.fallY = leader.fallY;
                   
                   if (leader.fallY >= 1.0) {
-                    // 下段から順に1マス落下移動
                     for (const item of stack) {
                       this.grid[item.r + 1][c] = item.block;
                       this.grid[item.r][c] = null;
                       item.block.fallY = 0;
                     }
                     if (bottomR + 2 >= this.rows || (this.grid[bottomR + 2][c] !== null && this.grid[bottomR + 2][c].state !== 'fall')) {
-                      for (const item of stack) {
-                        item.block.state = 'normal';
-                        item.block.fallY = 0;
-                      }
+                      for (const item of stack) { item.block.state = 'normal'; item.block.fallY = 0; }
                       needsMatchCheck = true;
                     }
                   }
                 }
               }
-              r = cur; // スタック上部まで走査を進める
+              r = cur;
             } else {
               this.grid[r][c].state = 'normal';
               this.grid[r][c].fallY = 0;
@@ -882,13 +855,9 @@
 
         if (needsMatchCheck) this.checkMatches();
         
-        // 予告ブロックの遅延と落下
         if (!isMoving && this.garbageQueue.length > 0) {
-          if (this.garbageQueue[0].delay > 0) {
-            this.garbageQueue[0].delay--;
-          } else {
-            this.spawnGarbage();
-          }
+          if (this.garbageQueue[0].delay > 0) this.garbageQueue[0].delay--;
+          else this.spawnGarbage();
         }
       }
 
@@ -926,7 +895,6 @@
         }
 
         if (matchedPositions.size > 0) {
-          // 敵のブロック消去時もSEを再生
           SE.play('normalErase');
 
           let chainActive = false;
@@ -944,16 +912,23 @@
           this.stopTimer = 50 + (matchedPositions.size * 10) + (this.chain * 10);
           this.score += matchedPositions.size * 10 * this.chain;
 
-          if (this.onSendGarbage && (matchedPositions.size >= 4 || this.chain >= 2 || hasSpecial)) {
-            let gw = Math.min(this.cols, 3 + (this.chain > 1 ? this.chain - 1 : 0));
-            if (matchedPositions.size >= 4 && this.chain < 2) {
-               gw = Math.min(this.cols, Math.max(3, matchedPositions.size - 1));
-            }
-            if (hasSpecial && matchedPositions.size < 4 && this.chain < 2) {
-               gw = 3;
-            }
-            const gh = Math.max(1, this.chain - 1);
-            this.onSendGarbage(gw, gh, hasSpecial);
+          // ==========================================
+          // お邪魔ブロック発生判定
+          // 通常ブロックの3個消し1コンボは送れない（2コンボ以上から送れる）
+          // ==========================================
+          let totalBlocks = 0;
+          if (this.chain >= 2) {
+            totalBlocks += (this.chain - 1) * 12; // 2コンボ=12個, 3コンボ=24個...
+          }
+          if (matchedPositions.size >= 4) {
+            totalBlocks += (matchedPositions.size - 3) * 6; // 4個消し=6個, 5個消し=12個...
+          }
+          if (hasSpecial) {
+            totalBlocks += 6; // ！ブロック消去ボーナス
+          }
+
+          if (totalBlocks > 0 && this.onSendGarbage) {
+            this.onSendGarbage(totalBlocks, hasSpecial);
           }
         } else {
           let isMoving = false;
@@ -1015,7 +990,6 @@
               } else {
                 const conf = COLORS.find(item => item.id === b.type);
                 if (conf) {
-                  // 消去アニメーション時はグレー（#6c757d）と元の色で交互に明滅
                   const isFlashing = (b.state === 'match' && Math.floor(b.timer / 4) % 2 === 0);
                   ctx.fillStyle = isFlashing ? '#6c757d' : conf.bg;
                   ctx.beginPath(); ctx.roundRect(x+2, y+2, CELL_PX-4, CELL_PX-4, 8); ctx.fill();
@@ -1063,8 +1037,8 @@
 
     // --- COM(AI) エンジン ---
     class ComAI {
-      constructor(engine, level) {
-        this.engine = engine; this.level = level;
+      constructor(engine, level, id) {
+        this.engine = engine; this.level = level; this.id = id;
         this.target = null;
         this.thinkInterval = [50, 35, 20, 5][level - 1]; 
         this.moveInterval = [15, 10, 5, 2][level - 1];   
@@ -1152,11 +1126,15 @@
       }
     }
 
-    // --- システム管理 ---
-    let myEngine, rivalEngine, myRenderer, rivalRenderer, comAI = null;
-    let peer = null, conn = null;
-    let currentMode = 'single', currentComLevel = 1;
-    let rematchReady = { me: false, rival: false };
+    // ==========================================
+    // 対戦・ターゲット管理システム
+    // ==========================================
+    let myEngine, myRenderer;
+    let opponents = []; // { id, name, engine, renderer, ai, isOnline, conn }
+    let myTargetIndex = -1; // -1: 均等分散, 0以上: 特定相手ターゲット
+    let peer = null, onlineConnections = [];
+    let currentMode = 'single', currentComLevel = 1, currentTotalPlayers = 2;
+    let rematchReady = { me: false };
     let isMatchOver = false;
     let loopId = null, syncIntervalId = null;
 
@@ -1167,6 +1145,113 @@
     }
     function showComMenu() { document.getElementById('main-menu').style.display = 'none'; document.getElementById('com-menu').style.display = 'flex'; }
     function backToMainMenu() { document.getElementById('com-menu').style.display = 'none'; document.getElementById('main-menu').style.display = 'flex'; }
+
+    // ターゲット選択・切り替え
+    function selectTarget(index) {
+      if (myTargetIndex === index) {
+        myTargetIndex = -1; // 解除して均等分散へ
+      } else {
+        if (opponents[index] && !opponents[index].engine.gameOver) {
+          myTargetIndex = index;
+        }
+      }
+      updateTargetUI();
+      SE.play('cursorMove');
+    }
+
+    function cycleTarget() {
+      if (opponents.length <= 0) return;
+      let next = myTargetIndex + 1;
+      while (next < opponents.length) {
+        if (!opponents[next].engine.gameOver) {
+          myTargetIndex = next;
+          updateTargetUI();
+          SE.play('cursorMove');
+          return;
+        }
+        next++;
+      }
+      myTargetIndex = -1; // 均等分散に戻る
+      updateTargetUI();
+      SE.play('cursorMove');
+    }
+
+    function updateTargetUI() {
+      opponents.forEach((opp, idx) => {
+        const el = document.getElementById(`rival-wrapper-${idx}`);
+        if (el) {
+          if (idx === myTargetIndex && !opp.engine.gameOver) {
+            el.classList.add('targeted');
+          } else {
+            el.classList.remove('targeted');
+          }
+        }
+      });
+    }
+
+    // ==========================================
+    // お邪魔ブロックの分散・ターゲット送信計算
+    // ==========================================
+    function distributeGarbage(senderId, totalBlocks, isHard) {
+      let candidateOpponents = [];
+      if (senderId === 'player') {
+        candidateOpponents = opponents.filter(o => !o.engine.gameOver);
+      } else {
+        // COMや相手からの送信の場合
+        candidateOpponents = [];
+        if (!myEngine.gameOver) candidateOpponents.push({ id: 'player', engine: myEngine });
+        opponents.forEach(o => {
+          if (o.id !== senderId && !o.engine.gameOver) candidateOpponents.push(o);
+        });
+      }
+
+      if (candidateOpponents.length === 0) return;
+
+      // プレイヤーが送信する場合のターゲット判定
+      let targetOppId = null;
+      if (senderId === 'player' && myTargetIndex !== -1 && opponents[myTargetIndex] && !opponents[myTargetIndex].engine.gameOver) {
+        targetOppId = opponents[myTargetIndex].id;
+      }
+
+      const hasTarget = targetOppId !== null && candidateOpponents.some(o => o.id === targetOppId);
+
+      if (hasTarget && candidateOpponents.length > 1) {
+        // ターゲットに50%
+        const targetBlocks = Math.floor(totalBlocks * 0.5);
+        // 残りプレイヤーに50%を等分（小数点以下切り捨て）
+        const remainingBlocks = totalBlocks * 0.5;
+        const othersCount = candidateOpponents.length - 1;
+        const otherEachBlocks = Math.floor(remainingBlocks / othersCount);
+
+        candidateOpponents.forEach(opp => {
+          const count = (opp.id === targetOppId) ? targetBlocks : otherEachBlocks;
+          if (count > 0) sendBlocksToOpponent(opp, count, isHard);
+        });
+      } else {
+        // 均等分散（小数点以下切り捨て）
+        const eachBlocks = Math.floor(totalBlocks / candidateOpponents.length);
+        if (eachBlocks > 0) {
+          candidateOpponents.forEach(opp => {
+            sendBlocksToOpponent(opp, eachBlocks, isHard);
+          });
+        }
+      }
+
+      // オンライン相手へのパケット中継
+      if (currentMode.startsWith('online') && senderId === 'player') {
+        onlineConnections.forEach(c => {
+          if (c && c.open) c.send({ type: 'distribute_garbage', totalBlocks, isHard, targetOppId });
+        });
+      }
+    }
+
+    function sendBlocksToOpponent(opp, count, isHard) {
+      let fullRows = Math.floor(count / 6);
+      let remainder = count % 6;
+      if (fullRows > 0) opp.engine.addGarbage(6, fullRows, isHard);
+      if (remainder >= 3) opp.engine.addGarbage(remainder, 1, isHard);
+      else if (remainder > 0 && fullRows === 0) opp.engine.addGarbage(remainder, 1, isHard);
+    }
 
     function showResultModal(titleMsg) {
       document.getElementById('result-title').innerText = titleMsg;
@@ -1184,23 +1269,17 @@
         document.getElementById('result-overlay').style.display = 'none';
       } else if (currentMode.startsWith('online')) {
         rematchReady.me = true;
-        if (conn && conn.open) conn.send({ type: 'rematch_req' });
-        
-        if (rematchReady.rival) {
-          resetGameLogic();
-          document.getElementById('result-overlay').style.display = 'none';
-        } else {
-          const btn = document.getElementById('result-rematch-btn');
-          btn.disabled = true;
-          btn.innerText = '待機中...';
-          document.getElementById('result-status').innerText = '相手の返答を待っています...';
-        }
+        onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'rematch_req' }); });
+        resetGameLogic();
+        document.getElementById('result-overlay').style.display = 'none';
       }
     }
 
-    function startGame(mode, level = 1) {
+    // --- ゲーム開始初期化 ---
+    function startGame(mode, level = 1, totalPlayers = 2) {
       currentMode = mode;
       currentComLevel = level;
+      currentTotalPlayers = totalPlayers;
       
       document.getElementById('menu-overlay').style.display = 'none';
       document.getElementById('game-area').style.display = 'flex';
@@ -1217,96 +1296,139 @@
 
     function resetGameLogic() {
       isMatchOver = false;
+      myTargetIndex = -1;
       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
       
       myRenderer = new BoardRenderer('my-canvas'); 
-      rivalRenderer = new BoardRenderer('rival-canvas');
-      
       myEngine = new PonEngine(
         (state) => { 
           if (state === 'gameover') {
-            if (isMatchOver) return;
-            isMatchOver = true;
-            if (currentMode.startsWith('online')) {
-              if (conn && conn.open) conn.send({ type: 'win' });
-              showResultModal("LOSE...");
-            } else if (currentMode === 'com') {
-              showResultModal("LOSE...");
-            } else {
-              showResultModal("GAME OVER");
-            }
+            checkMatchEnd();
           }
         },
-        (w, h, isHard) => { 
-          if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'garbage', w, h, isHard });
-          else if (currentMode === 'com' && rivalEngine) rivalEngine.addGarbage(w, h, isHard);
+        (totalBlocks, isHard) => { 
+          distributeGarbage('player', totalBlocks, isHard);
         },
         handicap,
         true
       );
-      
-      if (currentMode === 'com') {
-        rivalEngine = new PonEngine(
-          (state) => { 
-            if (state === 'gameover') {
-              if (isMatchOver) return;
-              isMatchOver = true;
-              showResultModal("WIN!!"); 
-              if (myEngine) myEngine.gameOver = true;
-            }
-          },
-          (w, h, isHard) => { myEngine.addGarbage(w, h, isHard); },
-          3,
-          false
-        );
-        comAI = new ComAI(rivalEngine, currentComLevel);
-      } else if (currentMode.startsWith('online')) {
-        rivalEngine = new PonEngine(null, null, 3, false);
+
+      // 相手盤面の動的生成
+      const rivalsArea = document.getElementById('rivals-area');
+      rivalsArea.innerHTML = '';
+      opponents = [];
+
+      const opponentCount = currentMode === 'single' ? 0 : currentTotalPlayers - 1;
+      if (opponentCount > 0) {
+        rivalsArea.style.display = 'flex';
+      } else {
+        rivalsArea.style.display = 'none';
+      }
+
+      for (let i = 0; i < opponentCount; i++) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'board-wrapper rival-board';
+        wrapper.id = `rival-wrapper-${i}`;
+        wrapper.onclick = () => selectTarget(i);
+
+        wrapper.innerHTML = `
+          <div class="garbage-preview-box">
+            <span class="preview-label">予告</span>
+            <div id="rival-garbage-preview-${i}" class="preview-list"></div>
+          </div>
+          <div class="board-header">
+            <span style="color: #e94560;">RIVAL ${i+1} <span class="target-badge">🎯 TARGET</span></span>
+            <span id="rival-score-label-${i}">SCORE: 0</span>
+          </div>
+          <div class="canvas-container"><canvas id="rival-canvas-${i}"></canvas></div>
+        `;
+        rivalsArea.appendChild(wrapper);
+
+        const oppId = `com_${i}`;
+        const rRenderer = new BoardRenderer(`rival-canvas-${i}`);
+        let rEngine = null, rAI = null;
+
+        if (currentMode === 'com') {
+          rEngine = new PonEngine(
+            (state) => { if (state === 'gameover') checkMatchEnd(); },
+            (totalBlocks, isHard) => { distributeGarbage(oppId, totalBlocks, isHard); },
+            3,
+            false
+          );
+          rAI = new ComAI(rEngine, currentComLevel, oppId);
+        } else if (currentMode.startsWith('online')) {
+          rEngine = new PonEngine(null, null, 3, false);
+        }
+
+        opponents.push({
+          id: oppId,
+          name: `RIVAL ${i+1}`,
+          engine: rEngine,
+          renderer: rRenderer,
+          ai: rAI,
+          index: i
+        });
       }
       
-      rematchReady = { me: false, rival: false };
       updateGarbagePreview(myEngine, 'my-garbage-preview');
-      if (rivalEngine) updateGarbagePreview(rivalEngine, 'rival-garbage-preview');
+      opponents.forEach((opp, i) => updateGarbagePreview(opp.engine, `rival-garbage-preview-${i}`));
+      updateTargetUI();
+    }
+
+    function checkMatchEnd() {
+      if (isMatchOver) return;
+
+      if (myEngine.gameOver) {
+        isMatchOver = true;
+        showResultModal("LOSE...");
+        return;
+      }
+
+      const aliveOpponents = opponents.filter(o => !o.engine.gameOver);
+      if (opponents.length > 0 && aliveOpponents.length === 0) {
+        isMatchOver = true;
+        showResultModal("WIN!!");
+      }
     }
 
     function startSingleGame() { 
-      document.getElementById('rival-wrapper').style.display = 'none';
-      startGame('single'); 
+      startGame('single', 1, 1); 
     }
     
     function startComGame(level) {
-      document.getElementById('rival-wrapper').style.display = 'flex';
-      startGame('com', level); 
+      const count = parseInt(document.getElementById('com-player-count').value) || 2;
+      startGame('com', level, count); 
     }
 
-    function startOnlineGame(isGuest) {
-      document.getElementById('rival-wrapper').style.display = 'flex';
-      startGame(isGuest ? 'online_guest' : 'online_host');
+    function startOnlineGame(totalCount = 2) {
+      startGame('online', 1, totalCount);
       
       if (syncIntervalId) clearInterval(syncIntervalId);
       syncIntervalId = setInterval(() => {
-        if (conn && conn.open && myEngine && !isMatchOver) {
-          conn.send({ 
-            type: 'sync', grid: myEngine.grid, nextRow: myEngine.nextRow, 
-            riseOffset: myEngine.riseOffset, score: myEngine.score, 
-            garbageQueue: myEngine.garbageQueue 
+        if (myEngine && !isMatchOver) {
+          onlineConnections.forEach(c => {
+            if (c && c.open) {
+              c.send({ 
+                type: 'sync', grid: myEngine.grid, nextRow: myEngine.nextRow, 
+                riseOffset: myEngine.riseOffset, score: myEngine.score, 
+                garbageQueue: myEngine.garbageQueue 
+              });
+            }
           });
         }
       }, 100);
-      showToast(isGuest ? '接続完了！対戦開始！' : '相手が参加しました！対戦開始！');
     }
 
     function exitGame() {
       if (myEngine && !myEngine.gameOver && currentMode !== 'single') {
         if (!confirm("退出してメニューに戻りますか？\n（対戦時は負けになります）")) return;
-        if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'surrender' });
-      } else {
-        if (currentMode.startsWith('online') && conn && conn.open) conn.send({ type: 'leave' });
+        onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'leave' }); });
       }
       
       isMatchOver = true;
-      myEngine = null; rivalEngine = null; comAI = null;
-      if (conn) { conn.close(); conn = null; }
+      myEngine = null; opponents = [];
+      onlineConnections.forEach(c => c.close());
+      onlineConnections = [];
       if (peer) { peer.destroy(); peer = null; }
       
       if (syncIntervalId) { clearInterval(syncIntervalId); syncIntervalId = null; }
@@ -1314,12 +1436,13 @@
 
       document.getElementById('result-overlay').style.display = 'none';
       document.getElementById('game-area').style.display = 'none';
-      document.getElementById('rival-wrapper').style.display = 'none';
+      document.getElementById('rivals-area').style.display = 'none';
       document.getElementById('menu-overlay').style.display = 'flex';
       document.getElementById('main-menu').style.display = 'flex';
       document.getElementById('com-menu').style.display = 'none';
     }
 
+    // --- パッド入力 ---
     let padState = {}, prevPadState = {};
     function pollGamepadInput() {
       const pad = navigator.getGamepads()[0];
@@ -1342,6 +1465,7 @@
       if (moved) SE.play('cursorMove');
       if (padConfig.Swap !== null && justPressed(padConfig.Swap)) myEngine.swap(myEngine.cursor.x, myEngine.cursor.y);
       if (padConfig.Rise !== null) myEngine.isRisingManualPad = padState[padConfig.Rise];
+      if (padConfig.Target !== null && justPressed(padConfig.Target)) cycleTarget();
     }
 
     function updateGarbagePreview(engine, containerId) {
@@ -1365,24 +1489,22 @@
       });
     }
 
-    let lastTime = 0;
-    let accumulator = 0;
+    let lastTime = 0, accumulator = 0;
     const FIXED_TIME_STEP = 1000 / 60;
 
     function gameLoop(time) {
       let deltaTime = time - lastTime;
       if (deltaTime > 100) deltaTime = 100;
       lastTime = time;
-      
       accumulator += deltaTime;
       
       while (accumulator >= FIXED_TIME_STEP) {
         pollGamepadInput();
         if (myEngine) myEngine.update();
-        if (currentMode !== 'single' && rivalEngine) {
-          if (comAI) comAI.update();
-          rivalEngine.update();
-        }
+        opponents.forEach(opp => {
+          if (opp.ai) opp.ai.update();
+          if (opp.engine) opp.engine.update();
+        });
         accumulator -= FIXED_TIME_STEP;
       }
       
@@ -1391,11 +1513,14 @@
         document.getElementById('score-label').innerText = `SCORE: ${myEngine.score} | CHAIN: ${myEngine.chain}`;
         updateGarbagePreview(myEngine, 'my-garbage-preview');
       }
-      if (currentMode !== 'single' && rivalEngine) {
-        rivalRenderer.draw(rivalEngine);
-        document.getElementById('rival-score-label').innerText = `SCORE: ${rivalEngine.score}`;
-        updateGarbagePreview(rivalEngine, 'rival-garbage-preview');
-      }
+      opponents.forEach((opp, i) => {
+        if (opp.renderer && opp.engine) {
+          opp.renderer.draw(opp.engine);
+          const scoreEl = document.getElementById(`rival-score-label-${i}`);
+          if (scoreEl) scoreEl.innerText = `SCORE: ${opp.engine.score}`;
+          updateGarbagePreview(opp.engine, `rival-garbage-preview-${i}`);
+        }
+      });
       
       loopId = requestAnimationFrame(gameLoop);
     }
@@ -1490,6 +1615,7 @@
         if (moved) SE.play('cursorMove');
         if (code === keyConfig.Swap) { e.preventDefault(); myEngine.swap(myEngine.cursor.x, myEngine.cursor.y); }
         if (code === keyConfig.Rise) { e.preventDefault(); myEngine.isRisingManualKey = true; }
+        if (code === keyConfig.Target) { e.preventDefault(); cycleTarget(); }
       });
 
       window.addEventListener('keyup', (e) => {
@@ -1497,7 +1623,7 @@
       });
     }
 
-    // --- オンライン対戦 ---
+    // --- オンライン対戦 (最大4人対応) ---
     const PEER_PREFIX = 'pdw-26-';
 
     function generateShortRoomCode() {
@@ -1509,33 +1635,25 @@
 
     function createRoom() {
       let code = document.getElementById('peer-room-id').value.trim();
-      if (!code) {
-        code = generateShortRoomCode();
-        document.getElementById('peer-room-id').value = code;
-      }
+      if (!code) { code = generateShortRoomCode(); document.getElementById('peer-room-id').value = code; }
       const fullPeerId = PEER_PREFIX + code.toUpperCase();
       
       if (peer) { try { peer.destroy(); } catch(e){} }
       peer = new Peer(fullPeerId);
 
       peer.on('open', () => {
-        document.getElementById('peer-info').innerHTML = `部屋コード: <b style="font-size:1.3rem; color:#ff007f;">${code.toUpperCase()}</b><br>相手にこのコードを伝えてください`;
+        document.getElementById('peer-info').innerHTML = `部屋コード: <b style="font-size:1.3rem; color:#ff007f;">${code.toUpperCase()}</b><br>最大4人まで参加可能！相手にコードを伝えてください`;
         navigator.clipboard?.writeText(code.toUpperCase()); 
         showToast(`部屋コード [${code.toUpperCase()}] をコピーしました！待機中...`);
       });
 
-      peer.on('error', (err) => {
-        if (err.type === 'unavailable-id') {
-          showToast('そのコードの部屋は既に存在します。別のコードを入力してください');
-        } else {
-          showToast('接続エラー: ' + err.type);
+      peer.on('connection', (c) => {
+        if (onlineConnections.length >= 3) {
+          c.close(); return; // 4人満員
         }
-      });
-
-      peer.on('connection', (c) => { 
-        conn = c; 
-        bindConnEvents(); 
-        startOnlineGame(false); 
+        onlineConnections.push(c);
+        bindConnEvents(c, onlineConnections.length - 1);
+        startOnlineGame(onlineConnections.length + 1);
       });
     }
 
@@ -1548,198 +1666,153 @@
       peer = new Peer();
 
       peer.on('open', () => {
-        conn = peer.connect(targetPeerId);
-        conn.on('open', () => { 
-          bindConnEvents(); 
-          startOnlineGame(true); 
+        const c = peer.connect(targetPeerId);
+        c.on('open', () => { 
+          onlineConnections = [c];
+          bindConnEvents(c, 0); 
+          startOnlineGame(2);
         });
-        conn.on('error', () => { showToast('部屋への接続に失敗しました'); });
+        c.on('error', () => { showToast('部屋への接続に失敗しました'); });
       });
-
-      peer.on('error', (err) => { showToast('接続エラー: ' + err.type); });
     }
-    
-    function bindConnEvents() {
-      conn.on('data', (data) => {
+
+    function bindConnEvents(c, index) {
+      c.on('data', (data) => {
         if (data.type === 'sync') {
-          if (rivalEngine && !isMatchOver) {
-            rivalEngine.grid = data.grid; rivalEngine.nextRow = data.nextRow; 
-            rivalEngine.riseOffset = data.riseOffset; rivalEngine.score = data.score;
-            if (data.garbageQueue) rivalEngine.garbageQueue = data.garbageQueue;
+          if (opponents[index] && opponents[index].engine && !isMatchOver) {
+            opponents[index].engine.grid = data.grid;
+            opponents[index].engine.nextRow = data.nextRow;
+            opponents[index].engine.riseOffset = data.riseOffset;
+            opponents[index].engine.score = data.score;
+            if (data.garbageQueue) opponents[index].engine.garbageQueue = data.garbageQueue;
           }
-        } else if (data.type === 'garbage') {
-          if (myEngine) myEngine.addGarbage(data.w, data.h, data.isHard); 
-          showToast('おじゃまブロックが飛んできた！');
-        } else if (data.type === 'win') {
-          if (!isMatchOver) {
-            isMatchOver = true;
-            showResultModal('WIN!!');
-            if (myEngine) myEngine.gameOver = true;
-            if (rivalEngine) rivalEngine.gameOver = true;
-          }
-        } else if (data.type === 'surrender') {
-          if (!isMatchOver) {
-            isMatchOver = true;
-            showResultModal('WIN!! (相手が退出)');
-            if (myEngine) myEngine.gameOver = true;
-            if (rivalEngine) rivalEngine.gameOver = true;
-            document.getElementById('result-rematch-btn').style.display = 'none';
-          }
-        } else if (data.type === 'rematch_req') {
-          rematchReady.rival = true;
-          if (rematchReady.me) {
-            resetGameLogic();
-            document.getElementById('result-overlay').style.display = 'none';
-          } else {
-            document.getElementById('result-status').innerText = '相手が再戦を希望しています！';
+        } else if (data.type === 'distribute_garbage') {
+          if (myEngine) {
+            let myBlocks = 0;
+            if (data.targetOppId === 'player') {
+              myBlocks = Math.floor(data.totalBlocks * 0.5);
+            } else {
+              myBlocks = Math.floor((data.totalBlocks * (data.targetOppId ? 0.5 : 1.0)) / (opponents.length + 1));
+            }
+            if (myBlocks > 0) sendBlocksToOpponent({ engine: myEngine }, myBlocks, data.isHard);
           }
         } else if (data.type === 'leave') {
-          if (!isMatchOver) {
-            isMatchOver = true;
-            showResultModal('相手が退出しました');
-          } else {
-            document.getElementById('result-status').innerText = '相手が退出しました。';
+          if (opponents[index] && opponents[index].engine) {
+            opponents[index].engine.gameOver = true;
+            checkMatchEnd();
           }
-          if (myEngine) myEngine.gameOver = true;
-          if (rivalEngine) rivalEngine.gameOver = true;
-          document.getElementById('result-rematch-btn').style.display = 'none';
         }
       });
-
-      conn.on('close', () => {
-        if (!isMatchOver) {
-          isMatchOver = true;
-          showResultModal('通信が切断されました');
-          if (myEngine) myEngine.gameOver = true;
-          if (rivalEngine) rivalEngine.gameOver = true;
-          document.getElementById('result-rematch-btn').style.display = 'none';
+      c.on('close', () => {
+        if (opponents[index] && opponents[index].engine) {
+          opponents[index].engine.gameOver = true;
+          checkMatchEnd();
         }
       });
     }
 
-    // --- 自動リサイズ・重なり防止レイアウト ---
+    // ==========================================
+    // 自動リサイズ・4人対戦対応レイアウト
+    // ==========================================
     function adjustLayout() {
-      const isPortrait = window.innerHeight > window.innerWidth;
       const W = window.innerWidth;
       const H = window.innerHeight;
+      const isLandscapeLarge = W >= 900 && W > H;
       const isLeft = document.getElementById('handedness-toggle')?.checked;
 
       const myWrapper = document.getElementById('my-wrapper');
-      const rivalWrapper = document.getElementById('rival-wrapper');
+      const rivalsArea = document.getElementById('rivals-area');
       const controls = document.getElementById('controls-container');
       const exitBtn = document.getElementById('exit-btn');
       const gameContainer = document.getElementById('game-container');
 
       controls.style.alignItems = 'center';
 
-      if (isPortrait) {
+      if (isLandscapeLarge) {
+        // 横画面（大画面）：横一列に並べる
         gameContainer.style.flexDirection = 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
-        gameContainer.style.paddingBottom = '0px'; 
-        gameContainer.style.paddingTop = '0px';    
+        gameContainer.style.padding = '10px';
 
-        if (rivalWrapper.parentNode !== controls) {
-          controls.insertBefore(rivalWrapper, controls.firstChild);
+        if (rivalsArea.parentNode === controls) gameContainer.appendChild(rivalsArea);
+        rivalsArea.style.flexDirection = 'row';
+        rivalsArea.style.transform = '';
+        rivalsArea.style.margin = '0';
+        rivalsArea.style.order = '0';
+
+        const totalBoards = 1 + opponents.length;
+        const availableW = W - 140;
+        const baseBoardW = 224;
+        let scale = Math.min(1.0, (H - 80) / 515);
+        if ((baseBoardW * totalBoards + 20 * totalBoards) * scale > availableW) {
+          scale = availableW / (baseBoardW * totalBoards + 20 * totalBoards);
         }
-        rivalWrapper.style.setProperty('order', '-1', 'important');
+        scale = Math.max(0.45, scale);
 
-        const rivalScale = 110 / 224; 
-        const originalRivalH = 510; 
-        const scaledRivalH = originalRivalH * rivalScale;
-        
-        rivalWrapper.style.transform = `scale(${rivalScale})`;
-        rivalWrapper.style.transformOrigin = 'top center';
-        rivalWrapper.style.position = 'relative';
-        rivalWrapper.style.top = '0';
-        rivalWrapper.style.left = 'auto';
-        rivalWrapper.style.right = 'auto';
-        rivalWrapper.style.zIndex = '25';
-        rivalWrapper.style.width = '224px';
-        rivalWrapper.style.flexShrink = '0';
-        rivalWrapper.style.marginBottom = `${scaledRivalH - originalRivalH}px`;
-        
-        controls.style.height = '515px';
-        controls.style.justifyContent = 'flex-start'; 
-        const handednessToggle = document.getElementById('handedness-toggle').parentNode;
-        handednessToggle.style.marginTop = 'auto';
+        myWrapper.style.transform = `scale(${scale})`;
+        myWrapper.style.margin = `0 ${(baseBoardW - baseBoardW * scale) / -2}px`;
 
-        const baseBoardH = 515; 
-        const availH = H - 80; 
-        let myScale = Math.min(1.0, availH / baseBoardH);
-        const contentW = 344;
-        if (contentW * myScale > W - 10) myScale = (W - 10) / contentW;
-        myScale = Math.max(0.4, myScale);
-        
-        myWrapper.style.transform = `scale(${myScale})`;
-        controls.style.transform = `scale(${myScale})`;
-        myWrapper.style.transformOrigin = 'center';
-        controls.style.transformOrigin = 'center';
+        opponents.forEach((_, i) => {
+          const el = document.getElementById(`rival-wrapper-${i}`);
+          if (el) {
+            el.style.transform = `scale(${scale})`;
+            el.style.margin = `0 ${(baseBoardW - baseBoardW * scale) / -2}px`;
+          }
+        });
 
-        const boardMx = (224 - 224 * myScale) / -2;
-        const ctrlMx = (110 - 110 * myScale) / -2;
-        const scaleMy = (baseBoardH - baseBoardH * myScale) / -2;
-        myWrapper.style.margin = `${scaleMy}px ${boardMx}px`;
-        controls.style.margin = `${scaleMy}px ${ctrlMx}px`;
-        
-        controls.style.position = 'relative';
-        controls.style.bottom = 'auto';
-        controls.style.left = 'auto';
-        controls.style.right = 'auto';
-        controls.style.width = '110px';
-
-        if (isLeft) {
-          exitBtn.style.right = '12px';
-          exitBtn.style.left = 'auto';
-        } else {
-          exitBtn.style.left = '12px';
-          exitBtn.style.right = 'auto';
-        }
-      } else {
-        gameContainer.style.flexDirection = 'row';
-        gameContainer.style.alignItems = 'center';
-        gameContainer.style.justifyContent = 'center';
-        gameContainer.style.paddingBottom = '10px';
-        gameContainer.style.paddingTop = '10px';
-
-        if (rivalWrapper.parentNode === controls) gameContainer.appendChild(rivalWrapper);
-        rivalWrapper.style.removeProperty('order');
-
-        rivalWrapper.style.transform = '';
-        rivalWrapper.style.position = '';
-        rivalWrapper.style.top = '';
-        rivalWrapper.style.left = '';
-        rivalWrapper.style.right = '';
-        rivalWrapper.style.margin = '0';
-        rivalWrapper.style.marginBottom = '0';
-        rivalWrapper.style.zIndex = '10';
-        rivalWrapper.style.width = '';
-        rivalWrapper.style.flexShrink = '';
-
-        myWrapper.style.transform = '';
-        myWrapper.style.margin = '0';
-        myWrapper.style.transformOrigin = 'center';
-
+        controls.style.transform = `scale(${scale})`;
         controls.style.height = '';
         controls.style.justifyContent = 'flex-end';
-        const handednessToggle = document.getElementById('handedness-toggle').parentNode;
-        handednessToggle.style.marginTop = '0';
 
-        controls.style.transform = '';
-        controls.style.margin = '0';
-        controls.style.position = '';
-        controls.style.width = '110px';
-        controls.style.bottom = '';
-        controls.style.left = '';
-        controls.style.right = '';
+        if (isLeft) { exitBtn.style.right = '15px'; exitBtn.style.left = 'auto'; }
+        else { exitBtn.style.left = '15px'; exitBtn.style.right = 'auto'; }
 
-        if (isLeft) {
-          exitBtn.style.right = '15px';
-          exitBtn.style.left = 'auto';
-        } else {
-          exitBtn.style.left = '15px';
-          exitBtn.style.right = 'auto';
-        }
+      } else {
+        // 縦画面（または小画面）：上部に相手の超ミニ盤面を並べ、下部に自分盤面
+        gameContainer.style.flexDirection = 'column';
+        gameContainer.style.alignItems = 'center';
+        gameContainer.style.justifyContent = 'center';
+        gameContainer.style.padding = '0';
+
+        rivalsArea.style.flexDirection = 'row';
+        rivalsArea.style.order = '-1';
+        rivalsArea.style.marginBottom = '4px';
+
+        // 相手超ミニ盤面のスケール計算
+        const oppCount = Math.max(1, opponents.length);
+        const miniScale = Math.min(0.42, (W - 20) / (224 * oppCount));
+        rivalsArea.style.transform = `scale(${miniScale})`;
+        rivalsArea.style.transformOrigin = 'center top';
+        rivalsArea.style.height = `${515 * miniScale}px`;
+
+        opponents.forEach((_, i) => {
+          const el = document.getElementById(`rival-wrapper-${i}`);
+          if (el) { el.style.transform = ''; el.style.margin = '0'; }
+        });
+
+        // 自分盤面＆コントロールの横並び（下部）
+        const subRow = document.createElement('div');
+        subRow.style.display = 'flex';
+        subRow.style.alignItems = 'center';
+        subRow.style.justifyContent = 'center';
+
+        const baseBoardH = 515;
+        const availH = H - (515 * miniScale) - 40;
+        let myScale = Math.min(1.0, availH / baseBoardH);
+        if (344 * myScale > W - 10) myScale = (W - 10) / 344;
+        myScale = Math.max(0.45, myScale);
+
+        myWrapper.style.transform = `scale(${myScale})`;
+        controls.style.transform = `scale(${myScale})`;
+        
+        const boardMx = (224 - 224 * myScale) / -2;
+        const ctrlMx = (110 - 110 * myScale) / -2;
+        myWrapper.style.margin = `0 ${boardMx}px`;
+        controls.style.margin = `0 ${ctrlMx}px`;
+
+        if (isLeft) { exitBtn.style.right = '12px'; exitBtn.style.left = 'auto'; }
+        else { exitBtn.style.left = '12px'; exitBtn.style.right = 'auto'; }
       }
     }
 
