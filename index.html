@@ -58,7 +58,7 @@
 
     #game-container {
       display: flex; flex-direction: row; gap: 10px; width: 100%; height: 100%; padding: 10px;
-      align-items: center; justify-content: center; flex: 1;
+      align-items: center; justify-content: center; flex: 1; position: relative;
     }
     
     .board-wrapper {
@@ -203,14 +203,18 @@
 
   <!-- ゲーム画面 -->
   <div id="game-area" class="right-handed">
+    <!-- 退出ボタン -->
     <button id="exit-btn" class="action-btn retire-btn absolute-top" onclick="exitGame()">退出 (リタイア)</button>
+
+    <!-- 3人以上対戦時の上部ミニ盤面エリア（最大25vh） -->
+    <div id="rivals-top-area" style="display:none;"></div>
 
     <div id="game-container">
       <div id="controls-container" style="display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; z-index: 20; width: 110px;">
-        <label class="switch-wrapper" style="background: rgba(0,0,0,0.85); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid #4ecca3;">
+        <label id="handedness-wrapper" class="switch-wrapper" style="background: rgba(0,0,0,0.85); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid #4ecca3;">
           <input type="checkbox" id="handedness-toggle" onchange="toggleHandedness()"> <span id="handedness-text" style="font-size: 0.75rem;">右利きモード</span>
         </label>
-        <label class="switch-wrapper" style="background: rgba(0,0,0,0.65); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid rgba(255,255,255,0.1);">
+        <label id="swipe-wrapper" class="switch-wrapper" style="background: rgba(0,0,0,0.65); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid rgba(255,255,255,0.1);">
           <input type="checkbox" id="continuous-swipe" checked>連続移動
         </label>
         <button class="action-btn" id="rise-btn" style="height: 60px; font-size: 1.05rem; box-shadow: 0 4px #8a0c24;">せり上げ</button>
@@ -228,6 +232,7 @@
         <div class="canvas-container"><canvas id="my-canvas"></canvas></div>
       </div>
       
+      <!-- 横画面・通常時の相手盤面エリア -->
       <div id="rivals-area" style="display: none; gap: 10px; align-items: center; justify-content: center;"></div>
     </div>
   </div>
@@ -1065,6 +1070,7 @@
         }
       }
       think() {
+        if (this.engine.gameOver || isMatchOver) return;
         this.actionTimer = this.thinkInterval;
         this.engine.isRisingManualPad = false;
 
@@ -1293,6 +1299,7 @@
           opp.engine.isRisingManualKey = false;
           opp.engine.isRisingManualPad = false;
           opp.engine.riseSpeed = 0;
+          opp.engine.gameOver = true;
         }
         if (opp.ai) {
           opp.ai.target = null;
@@ -1311,7 +1318,6 @@
       
       setupInput();
       resetGameLogic();
-      adjustLayout();
       
       if (loopId) cancelAnimationFrame(loopId);
       lastTime = performance.now();
@@ -1339,7 +1345,9 @@
       );
 
       const rivalsArea = document.getElementById('rivals-area');
+      const rivalsTopArea = document.getElementById('rivals-top-area');
       rivalsArea.innerHTML = '';
+      rivalsTopArea.innerHTML = '';
       opponents = [];
 
       const opponentCount = currentMode === 'single' ? 0 : currentTotalPlayers - 1;
@@ -1442,6 +1450,7 @@
       document.getElementById('result-overlay').style.display = 'none';
       document.getElementById('game-area').style.display = 'none';
       document.getElementById('rivals-area').style.display = 'none';
+      document.getElementById('rivals-top-area').style.display = 'none';
       document.getElementById('menu-overlay').style.display = 'flex';
       document.getElementById('main-menu').style.display = 'flex';
       document.getElementById('com-menu').style.display = 'none';
@@ -1723,69 +1732,71 @@
     }
 
     // ==========================================
-    // 自動リサイズ・対戦人数別レイアウト
+    // 自動リサイズ・対戦人数別レイアウト (完全修正版)
     // ==========================================
     function adjustLayout() {
+      const isPortrait = window.innerHeight > window.innerWidth;
       const W = window.innerWidth;
       const H = window.innerHeight;
-      const isLandscapeLarge = W >= 900 && W > H;
       const isLeft = document.getElementById('handedness-toggle')?.checked;
+      const isLandscapeLarge = W >= 900 && !isPortrait;
       const oppCount = opponents.length;
 
       const myWrapper = document.getElementById('my-wrapper');
       const rivalsArea = document.getElementById('rivals-area');
+      const rivalsTopArea = document.getElementById('rivals-top-area');
       const controls = document.getElementById('controls-container');
       const exitBtn = document.getElementById('exit-btn');
       const gameArea = document.getElementById('game-area');
       const gameContainer = document.getElementById('game-container');
-      const handednessToggleWrapper = document.getElementById('handedness-toggle')?.parentNode;
+      const handednessWrapper = document.getElementById('handedness-wrapper');
 
       if (!myWrapper || !controls || !exitBtn || !gameArea || !gameContainer) return;
 
-      const rowDir = isLeft ? 'row-reverse' : 'row';
+      controls.style.alignItems = 'center';
 
       if (isLandscapeLarge) {
         // -------------------------------------------------------------
         // 【横画面・大画面】：全モード共通で横一列
         // -------------------------------------------------------------
+        rivalsTopArea.style.display = 'none';
+        rivalsArea.style.display = oppCount > 0 ? 'flex' : 'none';
+
         if (exitBtn.parentNode !== gameArea) gameArea.appendChild(exitBtn);
         exitBtn.className = 'action-btn retire-btn absolute-top';
         exitBtn.style.position = '';
         exitBtn.style.width = '';
-        exitBtn.style.marginBottom = '';
+        exitBtn.style.margin = '';
         if (isLeft) { exitBtn.style.right = '15px'; exitBtn.style.left = 'auto'; }
         else { exitBtn.style.left = '15px'; exitBtn.style.right = 'auto'; }
 
-        if (rivalsArea.parentNode !== gameContainer) gameContainer.appendChild(rivalsArea);
-        rivalsArea.style.display = oppCount > 0 ? 'flex' : 'none';
-        rivalsArea.style.position = 'static';
-        rivalsArea.style.width = 'auto';
-        rivalsArea.style.height = 'auto';
-        rivalsArea.style.flexDirection = 'row';
-        rivalsArea.style.transform = '';
-        rivalsArea.style.margin = '0';
-        rivalsArea.style.order = '0';
-
         opponents.forEach((_, i) => {
           const el = document.getElementById(`rival-wrapper-${i}`);
-          if (el && el.parentNode !== rivalsArea) rivalsArea.appendChild(el);
           if (el) {
+            if (el.parentNode !== rivalsArea) rivalsArea.appendChild(el);
             el.style.order = '';
             el.style.position = '';
-            el.style.top = '';
-            el.style.left = '';
-            el.style.right = '';
-            el.style.marginBottom = '';
+            el.style.transform = '';
+            el.style.margin = '0';
             el.style.width = '';
             el.style.flexShrink = '';
           }
         });
 
+        rivalsArea.style.flexDirection = 'row';
+        rivalsArea.style.gap = '10px';
+
         controls.style.height = '';
         controls.style.justifyContent = 'flex-end';
-        if (handednessToggleWrapper) handednessToggleWrapper.style.marginTop = '0';
+        if (handednessWrapper) handednessWrapper.style.marginTop = '0';
 
-        gameContainer.style.flexDirection = rowDir;
+        gameContainer.style.position = 'relative';
+        gameContainer.style.top = '';
+        gameContainer.style.left = '';
+        gameContainer.style.transform = '';
+        gameContainer.style.width = '100%';
+        gameContainer.style.height = '100%';
+        gameContainer.style.flexDirection = 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.padding = '10px';
@@ -1814,22 +1825,30 @@
 
       } else if (oppCount <= 1) {
         // -------------------------------------------------------------
-        // 【縦画面・小画面】：2人対戦 (最初のUIを堅持) or 1人練習
+        // 【縦画面・小画面】：2人対戦 (最初のコードを完全に復元して堅持)
         // -------------------------------------------------------------
+        rivalsTopArea.style.display = 'none';
+        rivalsArea.style.display = 'none';
+
         if (exitBtn.parentNode !== gameArea) gameArea.appendChild(exitBtn);
         exitBtn.className = 'action-btn retire-btn absolute-top';
         exitBtn.style.position = '';
         exitBtn.style.width = '';
-        exitBtn.style.marginBottom = '';
+        exitBtn.style.margin = '';
         if (isLeft) { exitBtn.style.right = '12px'; exitBtn.style.left = 'auto'; }
         else { exitBtn.style.left = '12px'; exitBtn.style.right = 'auto'; }
 
-        rivalsArea.style.display = 'none';
-
-        gameContainer.style.flexDirection = rowDir;
+        gameContainer.style.position = 'relative';
+        gameContainer.style.top = '';
+        gameContainer.style.left = '';
+        gameContainer.style.transform = '';
+        gameContainer.style.width = '100%';
+        gameContainer.style.height = '100%';
+        gameContainer.style.flexDirection = 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
-        gameContainer.style.padding = '0';
+        gameContainer.style.paddingBottom = '0px'; 
+        gameContainer.style.paddingTop = '0px';
 
         if (oppCount === 1) {
           const rivalWrapper = document.getElementById('rival-wrapper-0');
@@ -1842,7 +1861,7 @@
             const rivalScale = 110 / 224; 
             const originalRivalH = 510; 
             const scaledRivalH = originalRivalH * rivalScale;
-
+            
             rivalWrapper.style.transform = `scale(${rivalScale})`;
             rivalWrapper.style.transformOrigin = 'top center';
             rivalWrapper.style.position = 'relative';
@@ -1857,11 +1876,11 @@
 
           controls.style.height = '515px';
           controls.style.justifyContent = 'flex-start'; 
-          if (handednessToggleWrapper) handednessToggleWrapper.style.marginTop = 'auto';
+          if (handednessWrapper) handednessWrapper.style.marginTop = 'auto';
         } else {
           controls.style.height = '';
           controls.style.justifyContent = 'flex-end';
-          if (handednessToggleWrapper) handednessToggleWrapper.style.marginTop = '0';
+          if (handednessWrapper) handednessWrapper.style.marginTop = '0';
         }
 
         const baseBoardH = 515; 
@@ -1870,7 +1889,7 @@
         const contentW = 344;
         if (contentW * myScale > W - 10) myScale = (W - 10) / contentW;
         myScale = Math.max(0.4, myScale);
-
+        
         myWrapper.style.transform = `scale(${myScale})`;
         controls.style.transform = `scale(${myScale})`;
         myWrapper.style.transformOrigin = 'center';
@@ -1881,7 +1900,7 @@
         const scaleMy = (baseBoardH - baseBoardH * myScale) / -2;
         myWrapper.style.margin = `${scaleMy}px ${boardMx}px`;
         controls.style.margin = `${scaleMy}px ${ctrlMx}px`;
-
+        
         controls.style.position = 'relative';
         controls.style.bottom = 'auto';
         controls.style.left = 'auto';
@@ -1890,37 +1909,35 @@
 
       } else {
         // -------------------------------------------------------------
-        // 【縦画面・小画面】：3人以上対戦
-        // 相手盤面：超ミニ盤面にして画面上部25%以内に配置
-        // 自分の盤面：画面の縦位置中央
-        // 自分の盤面の横：退出、利き手、連続移動、せり上げ を上からセット配置
+        // 【縦画面・小画面】：3人以上対戦 (物理的に絶対に重ねない厳密計算)
         // -------------------------------------------------------------
-        if (rivalsArea.parentNode !== gameArea) gameArea.appendChild(rivalsArea);
-        rivalsArea.style.display = 'flex';
-        rivalsArea.style.position = 'absolute';
-        rivalsArea.style.top = '6px';
-        rivalsArea.style.left = '0';
-        rivalsArea.style.width = '100vw';
-        const topMaxH = H * 0.25;
-        rivalsArea.style.height = `${topMaxH}px`;
-        rivalsArea.style.flexDirection = 'row';
-        rivalsArea.style.alignItems = 'center';
-        rivalsArea.style.justifyContent = 'center';
-        rivalsArea.style.gap = '6px';
-        rivalsArea.style.zIndex = '30';
-        rivalsArea.style.transform = '';
-        rivalsArea.style.margin = '0';
+        rivalsArea.style.display = 'none';
 
-        const availMiniH = topMaxH - 10;
-        const availMiniW = W - 16;
-        const scaleH = availMiniH / 510;
-        const scaleW = availMiniW / (oppCount * 224 + (oppCount - 1) * 6);
+        // 1. 上部25%エリア（相手超ミニ盤面）
+        rivalsTopArea.style.display = 'flex';
+        rivalsTopArea.style.position = 'absolute';
+        rivalsTopArea.style.top = '4px';
+        rivalsTopArea.style.left = '0';
+        rivalsTopArea.style.width = '100vw';
+        const maxTopH = H * 0.24; // 24%以内の天井を設定
+        rivalsTopArea.style.height = `${maxTopH}px`;
+        rivalsTopArea.style.flexDirection = 'row';
+        rivalsTopArea.style.alignItems = 'center';
+        rivalsTopArea.style.justifyContent = 'center';
+        rivalsTopArea.style.gap = '6px';
+        rivalsTopArea.style.zIndex = '30';
+        rivalsTopArea.style.overflow = 'hidden';
+
+        // 相手盤面を重ならないサイズまで縮小
+        const availW = W - 12;
+        const scaleH = (maxTopH - 6) / 510;
+        const scaleW = availW / (oppCount * 224 + (oppCount - 1) * 6);
         const miniScale = Math.min(scaleH, scaleW, 0.42);
 
         opponents.forEach((_, i) => {
           const el = document.getElementById(`rival-wrapper-${i}`);
           if (el) {
-            if (el.parentNode !== rivalsArea) rivalsArea.appendChild(el);
+            if (el.parentNode !== rivalsTopArea) rivalsTopArea.appendChild(el);
             el.style.order = '';
             el.style.position = 'relative';
             el.style.transform = `scale(${miniScale})`;
@@ -1933,31 +1950,40 @@
           }
         });
 
-        // 退出ボタンを controls の一番上に配置（退出、利き手、連続移動、せり上げ）
+        // 2. コントロール列（上から順に：退出、利き手、連続移動、せり上げ）
         if (exitBtn.parentNode !== controls) controls.insertBefore(exitBtn, controls.firstChild);
         exitBtn.className = 'action-btn retire-btn';
         exitBtn.style.position = 'static';
         exitBtn.style.width = '100%';
         exitBtn.style.padding = '8px 4px';
         exitBtn.style.fontSize = '0.85rem';
-        exitBtn.style.marginBottom = '2px';
+        exitBtn.style.marginBottom = '4px';
 
         controls.style.height = 'auto';
         controls.style.justifyContent = 'center';
         controls.style.width = '110px';
-        if (handednessToggleWrapper) handednessToggleWrapper.style.marginTop = '0';
+        if (handednessWrapper) handednessWrapper.style.marginTop = '0';
 
-        gameContainer.style.flexDirection = rowDir;
+        // 3. 自分の盤面＋コントロール列（画面縦位置中央に配置）
+        gameContainer.style.flexDirection = 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
+        gameContainer.style.position = 'absolute';
+        gameContainer.style.top = '50%';
+        gameContainer.style.left = '50%';
+        gameContainer.style.transform = 'translate(-50%, -50%)';
+        gameContainer.style.width = '100vw';
+        gameContainer.style.height = 'auto';
         gameContainer.style.padding = '0';
 
-        // 自分の盤面は画面の縦位置中央
-        const centerAvailH = H * 0.70;
-        let myScale = Math.min(1.0, centerAvailH / 515);
+        // 相手盤面（上部24%）と自分の盤面が絶対に重ならないための厳密不等式計算
+        // 中心が H*0.5、上端が H*0.5 - (515 * myScale)/2
+        // 上端 >= maxTopH + 8px を満たす最大スケールを適用
+        const maxCenterH = Math.max(100, (H * 0.5 - maxTopH - 10) * 2);
+        let myScale = Math.min(1.0, maxCenterH / 515);
         const contentW = 344;
         if (contentW * myScale > W - 10) myScale = (W - 10) / contentW;
-        myScale = Math.max(0.38, myScale);
+        myScale = Math.max(0.32, myScale);
 
         myWrapper.style.transform = `scale(${myScale})`;
         controls.style.transform = `scale(${myScale})`;
