@@ -1374,6 +1374,9 @@
           controls.insertBefore(rivalWrapper, controls.firstChild);
         }
 
+        // ★ 横画面用のCSSのorder設定が効いてしまうのを防ぐため、強制的に一番上（-1）にする
+        rivalWrapper.style.setProperty('order', '-1', 'important');
+
         // コントロール列の幅(110px)に合わせて相手盤面を縮小
         const rivalScale = 110 / 224; 
         const originalRivalH = 510; 
@@ -1392,11 +1395,11 @@
         // 縮小した分の高さをネガティブマージンで詰める
         rivalWrapper.style.marginBottom = `${scaledRivalH - originalRivalH}px`;
         
-        // ★コントロール列の高さを自分の盤面と同じにし、上（相手盤面）と下（ボタン類）に分ける
+        // コントロール列の高さを自分の盤面と同じにし、上（相手盤面）と下（ボタン類）に分ける
         controls.style.height = '515px';
         controls.style.justifyContent = 'flex-start'; 
         
-        // ★相手盤面より下の要素（利き手スイッチ）を一番下に押し込む
+        // 相手盤面より下の要素（利き手スイッチ）を一番下に押し込む
         const handednessToggle = document.getElementById('handedness-toggle').parentNode;
         handednessToggle.style.marginTop = 'auto';
 
@@ -1413,14 +1416,17 @@
         
         myWrapper.style.transform = `scale(${myScale})`;
         controls.style.transform = `scale(${myScale})`;
-        myWrapper.style.transformOrigin = 'center'; // ★スケール基準を中心にして画面中央を保つ
+        myWrapper.style.transformOrigin = 'center'; // スケール基準を中心にして画面中央を保つ
         controls.style.transformOrigin = 'center';
 
-        // 縮小による余白詰め（ネガティブマージン）
+        // ★ 縮小による余白詰め（上下左右のネガティブマージン）
+        // これにより、縦方向に発生する「見えない余白」がなくなり中央配置が担保されます。
         const boardMx = (224 - 224 * myScale) / -2;
         const ctrlMx = (110 - 110 * myScale) / -2;
-        myWrapper.style.margin = `0 ${boardMx}px`;
-        controls.style.margin = `0 ${ctrlMx}px`;
+        const scaleMy = (baseBoardH - baseBoardH * myScale) / -2;
+        
+        myWrapper.style.margin = `${scaleMy}px ${boardMx}px`;
+        controls.style.margin = `${scaleMy}px ${ctrlMx}px`;
         
         controls.style.position = 'relative';
         controls.style.bottom = 'auto';
@@ -1447,6 +1453,9 @@
         if (rivalWrapper.parentNode === controls) {
           gameContainer.appendChild(rivalWrapper);
         }
+
+        // ★ 強制的に上書きした order をリセット
+        rivalWrapper.style.removeProperty('order');
 
         rivalWrapper.style.transform = '';
         rivalWrapper.style.position = '';
