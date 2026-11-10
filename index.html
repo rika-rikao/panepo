@@ -1571,6 +1571,7 @@
     let matchPlayersConfig = [];
     let myOnlineId = '';
     let isMatchOver = false;
+    let isDeadInMatch = false; // 本戦での死亡フラグ（プラクティスと混同させない）
     let loopId = null, syncIntervalId = null;
     let matchState = 'ready'; // 'ready', 'preparing', 'playing', 'gameover'
     let currentMatchId = 0;
@@ -1822,7 +1823,7 @@
       if (matchState === 'gameover' || matchState === 'preparing' || matchState === 'ready') return;
 
       let aliveCount = 0;
-      if (myEngine && !myEngine.gameOver) aliveCount++;
+      if (myEngine && !myEngine.gameOver && !isDeadInMatch) aliveCount++;
       opponents.forEach(o => {
         if (o.engine && !o.engine.gameOver) aliveCount++;
       });
@@ -1830,18 +1831,26 @@
       // 自分が負けた瞬間
       if (myEngine && myEngine.gameOver && !isMatchOver && !isPracticeMode) {
         isMatchOver = true;
+        isDeadInMatch = true;
+
+        // 即座に敗北シグナルを送信
+        if (currentMode === 'online') {
+          const syncData = { type: 'sync', senderId: myOnlineId, gameOver: true };
+          onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
+        }
+
         if (currentMode === 'single') {
            matchState = 'gameover';
            stopAllEngines();
            showResultModal("GAME OVER");
         } else {
-           if (currentMode === 'com') stopAllEngines();
+           if (currentMode === 'com') stopAllEngines(); 
            showResultModal("LOSE...");
         }
       }
 
       // 自分以外の全員が負けた瞬間（自分が生き残って勝利）
-      if (!isMatchOver && opponents.length > 0 && aliveCount === 1 && !myEngine.gameOver) {
+      if (!isMatchOver && opponents.length > 0 && aliveCount === 1 && !myEngine.gameOver && !isDeadInMatch) {
          isMatchOver = true;
          matchState = 'gameover';
          stopAllEngines();
@@ -1969,7 +1978,7 @@
       if (toPanic) {
         bgmAudio.muted = true;
         panicBgmAudio.muted = false;
-        panicBgmAudio.currentTime = 0; // ピンチBGMは毎回最初から再生する
+        panicBgmAudio.currentTime = 0; 
       } else {
         panicBgmAudio.muted = true;
         bgmAudio.muted = false;
@@ -2001,6 +2010,7 @@
 
     function resetGameLogic() {
       isMatchOver = false;
+      isDeadInMatch = false;
       isPracticeMode = false;
       myTargetIndex = -1;
       currentMatchId = Date.now(); 
@@ -2045,7 +2055,7 @@
             <div id="rival-garbage-preview-${i}" class="preview-list"></div>
           </div>
           <div class="board-header">
-            <span style="color: ${nameColor};">RIVAL ${i+1} <span class="target-badge">🎯 TARGET</span></span>
+            <span style="color: ${nameColor};">${currentMode === 'com' ? `COM ${i+1}` : `RIVAL ${i+1}`} <span class="target-badge">🎯 TARGET</span></span>
             <span id="rival-score-label-${i}">SCORE: 0</span>
           </div>
           <div class="canvas-container"><canvas id="rival-canvas-${i}"></canvas></div>
@@ -2102,6 +2112,7 @@
       }
       
       isMatchOver = true;
+      isDeadInMatch = true;
       matchState = 'gameover';
       isPracticeMode = false;
       hostDisconnected = false;
@@ -2191,8 +2202,12 @@
         }
         if (!isMatchOver || isPracticeMode) {
           opponents.forEach(opp => {
-            if (opp.ai) opp.ai.update();
-            if (opp.engine && !opp.engine.gameOver) opp.engine.update();
+            // ホスト管理下のCOMのみローカルで自律更新させる（人間プレイヤーの盤面をローカルで勝手に更新しない！）
+            const isLocalControlledCom = (opp.type === 'com') && (currentMode === 'com' || myOnlineId === 'host');
+            if (isLocalControlledCom) {
+              if (opp.ai) opp.ai.update();
+              if (opp.engine && !opp.engine.gameOver) opp.engine.update();
+            }
           });
           checkPanic(); 
         }
@@ -2535,7 +2550,6 @@
       readyBgm();
       showReadyGo(); 
 
-      // 既に prepareMatchLocal で起動しているが、タイミングを合わせるため念のため再設定
       if (loopId) cancelAnimationFrame(loopId);
       lastTime = performance.now();
       accumulator = 0;
@@ -2546,6 +2560,7 @@
 
     function resetGameLogicOnline(config) {
       isMatchOver = false;
+      isDeadInMatch = false;
       isPracticeMode = false;
       myTargetIndex = -1;
       
@@ -2602,7 +2617,15 @@
 
         if (p.type === 'com' && myOnlineId === 'host') {
           rEngine = new PonEngine(
-            (state) => { if (state === 'gameover') checkMatchEnd(); },
+            (state) => { 
+              if (state === 'gameover') {
+                checkMatchEnd();
+                // COM死亡時も即座にゲストへ通知
+                onlineConnections.forEach(c => {
+                  if (c && c.open) c.send({ type: 'sync', senderId: p.id, gameOver: true });
+                });
+              } 
+            },
             (totalBlocks, isHard) => { distributeGarbageOnline(p.id, totalBlocks, isHard); },
             3,
             false
@@ -2613,6 +2636,8 @@
           rEngine = new PonEngine(null, null, 3, false);
           rEngine.garbageQueue = [];
         }
+
+        rEngine.gameOver = false; // 初期状態の確実なリセット
 
         opponents.push({
           id: p.id,
@@ -2646,7 +2671,7 @@
            onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
         } else {
            const syncData = { 
-             type: 'sync', senderId: myOnlineId, gameOver: myEngine.gameOver 
+             type: 'sync', senderId: myOnlineId, gameOver: isDeadInMatch 
            };
            onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
         }
@@ -2738,9 +2763,12 @@
             if (data.score !== undefined) senderOpp.engine.score = data.score;
             if (data.garbageQueue) senderOpp.engine.garbageQueue = data.garbageQueue;
 
-            if (data.gameOver && !senderOpp.engine.gameOver) {
-               senderOpp.engine.gameOver = true;
-               checkMatchEnd();
+            if (data.gameOver !== undefined) {
+               const wasGameOver = senderOpp.engine.gameOver;
+               senderOpp.engine.gameOver = data.gameOver;
+               if (!wasGameOver && data.gameOver) {
+                  checkMatchEnd();
+               }
             }
           }
           if (isHostMode) {
@@ -2879,7 +2907,6 @@
         gameContainer.style.width = '100%';
         gameContainer.style.height = '100%';
         
-        // 利き手に応じて配置順序を切り替え (isLeft? 左: controls, 右: rivalsArea / isLeft=false? 左: rivalsArea, 右: controls)
         gameContainer.style.flexDirection = 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
@@ -2935,7 +2962,6 @@
         gameContainer.style.transform = '';
         gameContainer.style.width = '100%';
         gameContainer.style.height = '100%';
-        // 利き手に応じてフレックスボックス全体を反転
         gameContainer.style.flexDirection = isLeft ? 'row' : 'row-reverse';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
@@ -3055,7 +3081,6 @@
         myWrapper.style.order = '';
         if (handednessWrapper) handednessWrapper.style.marginTop = '0';
 
-        // 利き手に応じてフレックスボックス全体を反転
         gameContainer.style.flexDirection = isLeft ? 'row' : 'row-reverse';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
@@ -3116,7 +3141,7 @@
       const gameAreaEl = document.getElementById('game-area');
       gameAreaEl.addEventListener('touchstart', (e) => {
         if (e.touches.length > 1) {
-          e.preventDefault(); // ズーム等を無効化
+          e.preventDefault(); 
         }
       }, { passive: false });
 
