@@ -38,15 +38,19 @@
     .input-box { padding: 10px; border-radius: 20px; border: 2px solid #4ecca3; background: #162447; color: #fff; text-align: center; width: 240px; outline: none; }
     
 /* ===================================================
-   設定画面モーダル（Safari アドレスバー被り完全対策版）
+   設定画面モーダル（あなたのコードを正常動作させた版）
    =================================================== */
 
 /* オーバーレイ（暗幕＆スクロールコンテナ） */
 #settings-overlay {
   position: fixed;
-  inset: 0;
+  /* ★修正1: bottom: 0 を外し、100svh でアドレスバーの上にピタッと止める */
+  top: 0;
+  left: 0;
+  right: 0;
   width: 100%;
-  height: 100svh; /* iOSのアドレスバー伸縮に追従 */
+  height: 100svh; 
+
   background: rgba(0, 0, 0, 0.9);
   z-index: 300;
   display: none; /* 表示切替時は JS で 'flex' にする */
@@ -54,12 +58,17 @@
   align-items: center;
   box-sizing: border-box;
 
-  /* Safariでも確実にスクロールさせる */
+  /* Safariで背面スクロールに吸い取られるのを防ぐ */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 
-  /* 左右と上部の余白 */
-  padding: max(20px, env(safe-area-inset-top)) 16px 0 16px;
+  /* 
+   * 上下パディング：
+   * 100svhで下端はアドレスバーの上に届いているため、
+   * 上下に最低限のクッション余白（16px）を空けるだけでOK
+   */
+  padding: max(16px, env(safe-area-inset-top)) 16px 16px 16px;
 }
 
 /* 設定ウィンドウ本体 */
@@ -72,11 +81,12 @@
   max-width: 450px;
 
   /* 
-   * 【最重要】
-   * Safariで消えてしまう親のpadding-bottomの代わりに、
-   * 下マージンに「アドレスバー回避（60px）＋ セーフエリア」を直指定
+   * ★修正2: 
+   * margin: auto だけだと「中身が多い時に上が消えて戻れなくなる」ため、
+   * auto の代わりに margin: auto 0; にしつつ、親に中央寄せを任せる
    */
-  margin: auto auto calc(env(safe-area-inset-bottom, 0px) + 60px) auto;
+  margin: auto 0; 
+  flex-shrink: 0; /* WebKitで潰れるのを防止 */
 
   padding: 18px;
   gap: 12px;
@@ -94,9 +104,8 @@
 
 /* 一番下の保存ボタン */
 .settings-box button.btn {
-  /* ボタン自体のタップ抜け・縮小を防ぐ */
   flex-shrink: 0;
-  min-height: 44px; /* iOS推奨タップ領域 */
+  min-height: 44px;
 }
 
 /* PC画面など高さに十分余裕がある場合は下マージンを通常の中央寄せに戻す */
