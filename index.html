@@ -95,10 +95,8 @@
       touch-action: none;
     }
     .rival-board { cursor: pointer; border-radius: 8px; padding: 2px; }
+    .rival-board.com-board .canvas-container { border-color: #8a8a8a; }
     .rival-board.targeted .canvas-container { border-color: #ff007f !important; box-shadow: 0 0 18px #ff007f !important; }
-    .rival-board.com-board .canvas-container { border-color: #6c757d; }
-    .rival-board.com-board.targeted .canvas-container { border-color: #ff007f !important; box-shadow: 0 0 18px #ff007f !important; }
-    
     .target-badge {
       display: none; background: #ff007f; color: #fff; font-size: 0.7rem; font-weight: 900;
       padding: 1px 6px; border-radius: 10px; animation: pulse 0.8s infinite alternate;
@@ -177,7 +175,7 @@
   </div>
 
   <div id="menu-overlay">
-    <div id="main-menu" style="display:flex; flex-direction:column; gap:15px; align-items:center;">
+    <div id="main-menu" style="display:flex; flex-direction:column; gap:15px; align-items:center; width:100%; max-width:400px;">
       <h1 class="title">ぱねぽ</h1>
       
       <div style="font-size: 0.9rem; color: #4ecca3; display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
@@ -191,31 +189,39 @@
         </select>
       </div>
 
-      <button class="btn" onclick="startSingleGame()">ひとりで練習</button>
-      <button class="btn" onclick="showComMenu()">COMと対戦</button>
-      <button class="btn" onclick="openSettings()" style="background:#1a4d3e; border-color:#4ecca3;">⚙️設定</button>
-      
-      <div style="border-top:1px solid rgba(255,255,255,0.2); width:100%; margin:5px 0;"></div>
-      
-      <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
-        <input type="text" id="peer-room-id" class="input-box" placeholder="部屋コード (最大4人)" maxlength="10">
+      <div id="main-menu-actions" style="display:flex; flex-direction:column; align-items:center; gap:15px; width:100%;">
+        <button class="btn" onclick="startSingleGame()">ひとりで練習</button>
+        <button class="btn" onclick="showComMenu()">COMと対戦</button>
+        <button class="btn" onclick="openSettings()" style="background:#1a4d3e; border-color:#4ecca3;">⚙️設定</button>
         
-        <div style="font-size: 0.9rem; color: #4ecca3; display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-          <span>オンライン最大人数:</span>
-          <select id="online-player-count" class="input-box" style="width: auto; padding: 5px; font-size: 0.85rem; border-radius: 10px;">
-            <option value="2" selected>2人対戦</option>
-            <option value="3">3人対戦</option>
-            <option value="4">4人対戦</option>
-          </select>
+        <div style="border-top:1px solid rgba(255,255,255,0.2); width:100%; margin:5px 0;"></div>
+        
+        <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+          <input type="text" id="peer-room-id" class="input-box" placeholder="部屋コード (最大4人)" maxlength="10">
+          <div style="font-size: 0.9rem; color: #4ecca3; display: flex; align-items: center; gap: 8px;">
+            <span>人数:</span>
+            <select id="online-max-players" class="input-box" style="width: auto; padding: 5px; font-size: 0.85rem; border-radius: 10px;">
+              <option value="2" selected>2人対戦</option>
+              <option value="3">3人対戦</option>
+              <option value="4">4人対戦</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="createRoom()">部屋を作る</button>
+            <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="joinRoom()">部屋に入る</button>
+          </div>
         </div>
-
-        <div style="display:flex; gap:10px;">
-          <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="createRoom()">部屋を作る</button>
-          <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="joinRoom()">部屋に入る</button>
-        </div>
-        <button id="host-start-btn" class="btn" style="display:none; background:#e94560; border-color:#ff007f; padding:8px 16px; font-size:1rem; min-width:240px; margin-top:5px;" onclick="hostStartGame()">COMを入れて開始</button>
       </div>
-      <div id="peer-info" style="font-size:0.9rem; color:#4ecca3; text-align:center; min-height:22px;"></div>
+      
+      <div id="room-waiting" style="display:none; flex-direction:column; align-items:center; gap:10px; margin-top:10px; background:#162447; padding:15px; border-radius:10px; border:1px solid #e94560; width:100%; box-sizing:border-box;">
+        <div style="font-size:1.1rem; color:#4ecca3;">待機ルーム</div>
+        <div id="waiting-code-container">部屋コード: <b id="waiting-code" style="font-size:1.4rem; color:#ff007f;"></b></div>
+        <div id="waiting-status-text" style="color:#fff;"></div>
+        <div>参加者: <span id="waiting-count" style="font-weight:bold; color:#fff;">1</span> / <span id="waiting-max" style="font-weight:bold; color:#fff;">2</span> 人</div>
+        <button id="force-start-btn" class="btn" style="padding:10px 16px; font-size:1rem; margin-top:10px; display:none;" onclick="forceStartRoom()">この人数で開始(不足はCOM)</button>
+        <button class="btn" style="padding:8px 16px; font-size:0.9rem; background:#444; border-color:#888;" onclick="cancelRoom()">キャンセル</button>
+      </div>
+
     </div>
     
     <div id="com-menu" style="display:none; flex-direction:column; gap:12px; align-items:center;">
@@ -441,7 +447,6 @@
 
       bgmAudio.load();
       panicBgmAudio.load();
-
       bgmAudio.currentTime = 0;
       panicBgmAudio.currentTime = 0;
       mainBgmTime = 0;
@@ -476,7 +481,6 @@
     function resumeBgm() {
       isBgmIntendedToPlay = true;
       isBgmPlaying = true;
-      
       bgmAudio.muted = false;
       panicBgmAudio.muted = false;
 
@@ -749,7 +753,6 @@
           }
           if (cells.length === 0) return;
 
-          // 各groupIdごとに最下段の行(最大のr)を求める
           let groupMaxR = {};
           triggeredGroupIds.forEach(gid => {
             let rs = cells.filter(item => item.b.groupId === gid).map(item => item.r);
@@ -776,7 +779,7 @@
             let isGroupBottom = (item.r === groupMaxR[item.b.groupId]);
             
             item.b.state = 'transforming';
-            item.b.transformDelay = idx * 3;
+            item.b.transformDelay = idx * 6;
             item.b.isTarget = isGroupBottom;
             item.b.transformToNormal = isGroupBottom && !item.b.isHard;
             item.b.transformGroupId = transformGroupId;
@@ -842,7 +845,7 @@
                   b.state = 'transformed_wait';
                 } else {
                   b.state = 'transforming_wait';
-                  b.particleTimer = 30; // 消滅アニメーション時間を倍(30)に延長（ルールには影響しない）
+                  b.particleTimer = 30;
                 }
 
                 if (!playedGarbageSE) {
@@ -1248,13 +1251,12 @@
                 }
 
                 if (b.state === 'transforming') {
-                  if (b.transformDelay < 4) {
-                    ctx.fillStyle = `rgba(255, 255, 255, ${(4 - b.transformDelay) / 4})`;
+                  if (b.transformDelay < 8) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${(8 - b.transformDelay) / 8})`;
                     ctx.fillRect(x, y, CELL_PX, CELL_PX);
                   }
                 }
                 
-                // 消滅時の残像エフェクトをゆっくり（15 -> 30フレームで減衰）に
                 if (b.particleTimer > 0) {
                   ctx.fillStyle = `rgba(255, 255, 255, ${b.particleTimer / 30})`;
                   ctx.fillRect(x, y, CELL_PX, CELL_PX);
@@ -1312,9 +1314,8 @@
       constructor(engine, level, id) {
         this.engine = engine; this.level = level; this.id = id;
         this.target = null;
-        this.targetOppGlobalIndex = null; // お邪魔送信用のターゲット
-        this.thinkInterval = [50, 35, 20, 5][level - 1]; 
-        this.moveInterval = [15, 10, 5, 2][level - 1];   
+        this.thinkInterval = [50, 35, 20, 5][level - 1] || 35; 
+        this.moveInterval = [15, 10, 5, 2][level - 1] || 10;   
         this.actionTimer = this.thinkInterval;
         this.moveTimer = 0;
         this.engine.riseSpeed = 0.0010 + (level * 0.0002); 
@@ -1435,15 +1436,9 @@
     let opponents = [];
     let myTargetIndex = -1;
     let peer = null, onlineConnections = [];
-    let currentMode = 'single', currentComLevel = 1, currentTotalPlayers = 2;
-    
-    // オンライン追加変数
-    let isHost = false;
-    let myPlayerIndex = 0;
-    let maxOnlinePlayers = 2;
-    let realGuestCount = 0;
-
-    let rematchReady = { me: false };
+    let currentMode = 'single', currentComLevel = 2, currentTotalPlayers = 2;
+    let matchPlayersConfig = [];
+    let myOnlineId = '';
     let isMatchOver = false;
     let loopId = null, syncIntervalId = null;
     let matchState = 'ready'; // 'ready', 'playing', 'gameover'
@@ -1454,20 +1449,16 @@
       t.innerText = msg; t.style.display = 'block'; 
       setTimeout(() => t.style.display = 'none', 3000); 
     }
-    function showComMenu() { document.getElementById('main-menu').style.display = 'none'; document.getElementById('com-menu').style.display = 'flex'; }
-    function backToMainMenu() { document.getElementById('com-menu').style.display = 'none'; document.getElementById('main-menu').style.display = 'flex'; }
+    function showComMenu() { document.getElementById('main-menu-actions').style.display = 'none'; document.getElementById('com-menu').style.display = 'flex'; }
+    function backToMainMenu() { document.getElementById('com-menu').style.display = 'none'; document.getElementById('main-menu-actions').style.display = 'flex'; }
 
-    function selectTarget(drawIndex) {
+    function selectTarget(index) {
       if (isMatchOver) return;
-      
-      const opp = opponents.find(o => o.index === drawIndex);
-      if (!opp) return;
-
-      if (myTargetIndex !== -1 && opponents[myTargetIndex] === opp) {
+      if (myTargetIndex === index) {
         myTargetIndex = -1;
       } else {
-        if (!opp.engine.gameOver) {
-          myTargetIndex = opponents.indexOf(opp);
+        if (opponents[index] && !opponents[index].engine.gameOver) {
+          myTargetIndex = index;
         }
       }
       updateTargetUI();
@@ -1493,7 +1484,7 @@
 
     function updateTargetUI() {
       opponents.forEach((opp, idx) => {
-        const el = document.getElementById(`rival-wrapper-${opp.index}`);
+        const el = document.getElementById(`rival-wrapper-${idx}`);
         if (el) {
           if (idx === myTargetIndex && !opp.engine.gameOver) {
             el.classList.add('targeted');
@@ -1504,79 +1495,110 @@
       });
     }
 
-    function applyAttackLocally(data) {
-      let candidateOpponents = [];
-      
-      if (myPlayerIndex !== data.senderIndex && myEngine && !myEngine.gameOver) {
-        candidateOpponents.push({ id: 'player', engine: myEngine, globalIndex: myPlayerIndex });
+    // 通常のローカル/COM対戦用
+    function distributeGarbage(senderId, totalBlocks, isHard) {
+      if (isMatchOver) return;
+      if (currentMode.startsWith('online')) {
+        distributeGarbageOnline(senderId, totalBlocks, isHard);
+        return;
       }
-      opponents.forEach(o => {
-        if (o.globalIndex !== data.senderIndex && !o.engine.gameOver) {
-          candidateOpponents.push(o);
-        }
-      });
+
+      let candidateOpponents = [];
+      if (senderId === 'player') {
+        candidateOpponents = opponents.filter(o => !o.engine.gameOver);
+      } else {
+        candidateOpponents = [];
+        if (!myEngine.gameOver) candidateOpponents.push({ id: 'player', engine: myEngine });
+        opponents.forEach(o => {
+          if (o.id !== senderId && !o.engine.gameOver) candidateOpponents.push(o);
+        });
+      }
 
       if (candidateOpponents.length === 0) return;
 
-      const hasTarget = data.targetIndex !== null && candidateOpponents.some(o => o.globalIndex === data.targetIndex);
+      let targetOppId = null;
+      if (senderId === 'player' && myTargetIndex !== -1 && opponents[myTargetIndex] && !opponents[myTargetIndex].engine.gameOver) {
+        targetOppId = opponents[myTargetIndex].id;
+      }
+
+      const hasTarget = targetOppId !== null && candidateOpponents.some(o => o.id === targetOppId);
 
       if (hasTarget && candidateOpponents.length > 1) {
-        const targetBlocks = Math.floor(data.totalBlocks * 0.5);
-        const remainingBlocks = data.totalBlocks * 0.5;
+        const targetBlocks = Math.floor(totalBlocks * 0.5);
+        const remainingBlocks = totalBlocks * 0.5;
         const othersCount = candidateOpponents.length - 1;
         const otherEachBlocks = Math.floor(remainingBlocks / othersCount);
 
         candidateOpponents.forEach(opp => {
-          const count = (opp.globalIndex === data.targetIndex) ? targetBlocks : otherEachBlocks;
-          if (count > 0) sendBlocksToOpponent(opp, count, data.isHard);
+          const count = (opp.id === targetOppId) ? targetBlocks : otherEachBlocks;
+          if (count > 0) sendBlocksToOpponent(opp, count, isHard);
         });
       } else {
-        const eachBlocks = Math.floor(data.totalBlocks / candidateOpponents.length);
+        const eachBlocks = Math.floor(totalBlocks / candidateOpponents.length);
         if (eachBlocks > 0) {
           candidateOpponents.forEach(opp => {
-            sendBlocksToOpponent(opp, eachBlocks, data.isHard);
+            sendBlocksToOpponent(opp, eachBlocks, isHard);
           });
         }
       }
     }
 
-    function distributeGarbage(senderId, totalBlocks, isHard) {
+    // オンライン対戦用
+    function distributeGarbageOnline(senderId, totalBlocks, isHard) {
       if (isMatchOver) return;
 
-      const senderGlobalIndex = senderId === 'player' ? myPlayerIndex : opponents.find(o => o.id === senderId).globalIndex;
-      
-      let targetGlobalIndex = null;
-      if (senderId === 'player' && myTargetIndex !== -1 && opponents[myTargetIndex] && !opponents[myTargetIndex].engine.gameOver) {
-        targetGlobalIndex = opponents[myTargetIndex].globalIndex;
-      } else if (senderId !== 'player') {
-        const senderOpp = opponents.find(o => o.id === senderId);
-        if (senderOpp && senderOpp.ai && senderOpp.ai.targetOppGlobalIndex !== undefined) {
-          targetGlobalIndex = senderOpp.ai.targetOppGlobalIndex;
+      let candidateOpponents = [];
+      if (senderId === myOnlineId) {
+        candidateOpponents = opponents.filter(o => !o.engine.gameOver);
+      } else {
+        if (!myEngine.gameOver) candidateOpponents.push({ id: myOnlineId, engine: myEngine });
+        opponents.forEach(o => {
+          if (o.id !== senderId && !o.engine.gameOver) candidateOpponents.push(o);
+        });
+      }
+      if (candidateOpponents.length === 0) return;
+
+      let targetOppId = null;
+      if (senderId === myOnlineId && myTargetIndex !== -1 && opponents[myTargetIndex] && !opponents[myTargetIndex].engine.gameOver) {
+        targetOppId = opponents[myTargetIndex].id;
+      }
+
+      const hasTarget = targetOppId !== null && candidateOpponents.some(o => o.id === targetOppId);
+      let targetsDict = {};
+
+      if (hasTarget && candidateOpponents.length > 1) {
+        const targetBlocks = Math.floor(totalBlocks * 0.5);
+        const otherEachBlocks = Math.floor((totalBlocks * 0.5) / (candidateOpponents.length - 1));
+        candidateOpponents.forEach(opp => {
+          const count = (opp.id === targetOppId) ? targetBlocks : otherEachBlocks;
+          if (count > 0) targetsDict[opp.id] = count;
+        });
+      } else {
+        const eachBlocks = Math.floor(totalBlocks / candidateOpponents.length);
+        if (eachBlocks > 0) {
+          candidateOpponents.forEach(opp => targetsDict[opp.id] = eachBlocks);
         }
       }
 
-      const attackData = {
-        type: 'attack',
-        senderIndex: senderGlobalIndex,
-        totalBlocks: totalBlocks,
-        isHard: isHard,
-        targetIndex: targetGlobalIndex,
-        matchId: currentMatchId
-      };
+      if (Object.keys(targetsDict).length === 0) return;
 
-      // ローカル処理(自分自身やローカルのCOMに適用)
-      applyAttackLocally(attackData);
-
-      // オンライン通信
-      if (currentMode === 'online') {
-        if (isHost) {
-          onlineConnections.forEach(c => {
-            if (c && c.open) c.send(attackData);
-          });
-        } else {
-          if (onlineConnections[0] && onlineConnections[0].open) {
-            onlineConnections[0].send(attackData);
+      if (myOnlineId === 'host') {
+        for (const [tId, count] of Object.entries(targetsDict)) {
+          if (tId === 'host') {
+            sendBlocksToOpponent({ engine: myEngine }, count, isHard);
+          } else {
+            const opp = opponents.find(o => o.id === tId);
+            if (opp && opp.type === 'com') {
+               sendBlocksToOpponent(opp, count, isHard);
+            }
           }
+        }
+        onlineConnections.forEach(c => {
+          if (c && c.open) c.send({ type: 'add_garbage_multi', targets: targetsDict, isHard });
+        });
+      } else {
+        if (onlineConnections[0] && onlineConnections[0].open) {
+          onlineConnections[0].send({ type: 'garbage_request', targets: targetsDict, isHard });
         }
       }
     }
@@ -1602,30 +1624,19 @@
 
     function requestRematch() {
       if (currentMode === 'single' || currentMode === 'com') {
-        resetGameLogic();
+        startGame(currentMode, currentComLevel, currentTotalPlayers);
         document.getElementById('result-overlay').style.display = 'none';
-        matchState = 'ready';
-        readyBgm();
-        showReadyGo();
-      } else if (currentMode === 'online') {
-        if (isHost) {
-          rematchReady.me = true;
-          let allReady = true;
-          for (let i = 1; i <= realGuestCount; i++) {
-            if (!rematchReady[i]) allReady = false;
-          }
-          if (allReady) {
-            document.getElementById('result-overlay').style.display = 'none';
-            hostStartGame();
-          } else {
-            document.getElementById('result-status').innerText = '他のプレイヤーの待機中...';
-            document.getElementById('result-rematch-btn').disabled = true;
-          }
+      } else if (currentMode.startsWith('online')) {
+        onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'rematch_req' }); });
+        if (myOnlineId === 'host') {
+          onlineConnections.forEach(c => {
+            const config = { players: matchPlayersConfig, myId: matchPlayersConfig.find(p=>p.conn===c)?.id || 'unknown', matchId: Date.now() };
+            if(c.open) c.send({ type: 'start_match', config });
+          });
+          startGameWithConfig({ players: matchPlayersConfig, myId: 'host', matchId: Date.now() });
+          document.getElementById('result-overlay').style.display = 'none';
         } else {
-          if (onlineConnections[0] && onlineConnections[0].open) {
-            onlineConnections[0].send({ type: 'rematch_req', playerIndex: myPlayerIndex });
-          }
-          document.getElementById('result-status').innerText = 'ホストの開始を待機中...';
+          showToast('ホストの再戦開始を待っています...');
           document.getElementById('result-rematch-btn').disabled = true;
         }
       }
@@ -1736,14 +1747,15 @@
       }
       
       if (myEngine.garbageQueue.length > 0) isMoving = true; 
-      
       if (isMoving) return;
       
       let panic = false;
-      for (let r = 0; r <= 2; r++) {
+      for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
           if (myEngine.grid[r][c] !== null) {
-            panic = true; break;
+            if ((r - myEngine.riseOffset) <= ROWS * 0.3) {
+              panic = true; break;
+            }
           }
         }
         if (panic) break;
@@ -1799,13 +1811,7 @@
     function resetGameLogic() {
       isMatchOver = false;
       myTargetIndex = -1;
-      
-      if (currentMode !== 'online') {
-        currentMatchId = Date.now();
-        myPlayerIndex = 0;
-      }
-
-      rematchReady = { me: false };
+      currentMatchId = Date.now(); 
       
       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
       
@@ -1822,6 +1828,7 @@
         handicap,
         true
       );
+      myEngine.garbageQueue = [];
 
       const rivalsArea = document.getElementById('rivals-area');
       const rivalsTopArea = document.getElementById('rivals-top-area');
@@ -1829,71 +1836,58 @@
       rivalsTopArea.innerHTML = '';
       opponents = [];
 
-      let drawIndex = 0;
-      for (let gIdx = 0; gIdx < currentTotalPlayers; gIdx++) {
-        if (gIdx === myPlayerIndex) continue;
+      const opponentCount = currentMode === 'single' ? 0 : currentTotalPlayers - 1;
 
-        const isCom = currentMode === 'com' || (currentMode === 'online' && gIdx > realGuestCount);
-
+      for (let i = 0; i < opponentCount; i++) {
         const wrapper = document.createElement('div');
         wrapper.className = 'board-wrapper rival-board';
-        wrapper.id = `rival-wrapper-${drawIndex}`;
-        wrapper.onclick = ((idx) => () => selectTarget(idx))(drawIndex);
+        if (currentMode === 'com') wrapper.classList.add('com-board');
+        wrapper.id = `rival-wrapper-${i}`;
+        wrapper.onclick = () => selectTarget(i);
 
-        if (isCom) {
-          wrapper.classList.add('com-board');
-        }
-
-        const nameLabel = isCom ? `COM ${gIdx}` : `PLAYER ${gIdx}`;
-        const nameColor = isCom ? '#a8b2bd' : '#e94560';
+        let nameColor = currentMode === 'com' ? '#aaaaaa' : '#e94560';
 
         wrapper.innerHTML = `
           <div class="garbage-preview-box">
             <span class="preview-label">予告</span>
-            <div id="rival-garbage-preview-${drawIndex}" class="preview-list"></div>
+            <div id="rival-garbage-preview-${i}" class="preview-list"></div>
           </div>
           <div class="board-header">
-            <span style="color: ${nameColor}; font-weight: bold;">${nameLabel} <span class="target-badge">🎯 TARGET</span></span>
-            <span id="rival-score-label-${drawIndex}">SCORE: 0</span>
+            <span style="color: ${nameColor};">RIVAL ${i+1} <span class="target-badge">🎯 TARGET</span></span>
+            <span id="rival-score-label-${i}">SCORE: 0</span>
           </div>
-          <div class="canvas-container"><canvas id="rival-canvas-${drawIndex}"></canvas></div>
+          <div class="canvas-container"><canvas id="rival-canvas-${i}"></canvas></div>
         `;
         rivalsArea.appendChild(wrapper);
 
-        const oppId = isCom ? `com_${gIdx}` : `player_${gIdx}`;
-        const rRenderer = new BoardRenderer(`rival-canvas-${drawIndex}`);
+        const oppId = `com_${i}`;
+        const rRenderer = new BoardRenderer(`rival-canvas-${i}`);
         let rEngine = null, rAI = null;
 
-        if (isCom) {
+        if (currentMode === 'com') {
           rEngine = new PonEngine(
             (state) => { if (state === 'gameover') checkMatchEnd(); },
             (totalBlocks, isHard) => { distributeGarbage(oppId, totalBlocks, isHard); },
             3,
             false
           );
-          if (currentMode === 'com' || (currentMode === 'online' && isHost)) {
-            rAI = new ComAI(rEngine, currentComLevel, oppId);
-          }
-        } else {
-          rEngine = new PonEngine(null, null, 3, false);
+          rEngine.garbageQueue = [];
+          rAI = new ComAI(rEngine, currentComLevel, oppId);
         }
 
         opponents.push({
           id: oppId,
-          name: nameLabel,
-          globalIndex: gIdx,
-          isCom: isCom,
+          name: `RIVAL ${i+1}`,
+          type: 'com',
           engine: rEngine,
           renderer: rRenderer,
           ai: rAI,
-          index: drawIndex
+          index: i
         });
-        
-        drawIndex++;
       }
       
       updateGarbagePreview(myEngine, 'my-garbage-preview');
-      opponents.forEach((opp) => updateGarbagePreview(opp.engine, `rival-garbage-preview-${opp.index}`));
+      opponents.forEach((opp, i) => updateGarbagePreview(opp.engine, `rival-garbage-preview-${i}`));
       updateTargetUI();
       adjustLayout();
     }
@@ -1907,44 +1901,10 @@
       startGame('com', level, count); 
     }
 
-    function startOnlineGame() {
-      startGame('online', 1, currentTotalPlayers);
-      document.getElementById('host-start-btn').style.display = 'none';
-      
-      if (syncIntervalId) clearInterval(syncIntervalId);
-      syncIntervalId = setInterval(() => {
-        if (myEngine && !isMatchOver) {
-          if (isHost) {
-            onlineConnections.forEach(c => {
-              if (c && c.open) {
-                c.send({ type: 'sync', playerIndex: myPlayerIndex, grid: myEngine.grid, nextRow: myEngine.nextRow, riseOffset: myEngine.riseOffset, score: myEngine.score, garbageQueue: myEngine.garbageQueue });
-                opponents.forEach(opp => {
-                  if (opp.isCom) {
-                    c.send({ type: 'sync', playerIndex: opp.globalIndex, grid: opp.engine.grid, nextRow: opp.engine.nextRow, riseOffset: opp.engine.riseOffset, score: opp.engine.score, garbageQueue: opp.engine.garbageQueue });
-                  }
-                });
-              }
-            });
-          } else {
-            if (onlineConnections[0] && onlineConnections[0].open) {
-              onlineConnections[0].send({ type: 'sync', playerIndex: myPlayerIndex, grid: myEngine.grid, nextRow: myEngine.nextRow, riseOffset: myEngine.riseOffset, score: myEngine.score, garbageQueue: myEngine.garbageQueue });
-            }
-          }
-        }
-      }, 100);
-    }
-
     function exitGame() {
       if (myEngine && !myEngine.gameOver && currentMode !== 'single' && !isMatchOver) {
         if (!confirm("退出してメニューに戻りますか？\n（対戦時は負けになります）")) return;
-        if (currentMode === 'online') {
-          const leaveData = { type: 'leave', playerIndex: myPlayerIndex };
-          if (isHost) {
-            onlineConnections.forEach(c => { if(c && c.open) c.send(leaveData); });
-          } else {
-            if (onlineConnections[0] && onlineConnections[0].open) onlineConnections[0].send(leaveData);
-          }
-        }
+        onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'leave' }); });
       }
       
       isMatchOver = true;
@@ -1956,8 +1916,6 @@
       onlineConnections.forEach(c => c.close());
       onlineConnections = [];
       if (peer) { peer.destroy(); peer = null; }
-      document.getElementById('host-start-btn').style.display = 'none';
-      document.getElementById('peer-info').innerText = '';
       
       if (syncIntervalId) { clearInterval(syncIntervalId); syncIntervalId = null; }
       if (loopId) { cancelAnimationFrame(loopId); loopId = null; }
@@ -1967,7 +1925,9 @@
       document.getElementById('rivals-area').style.display = 'none';
       document.getElementById('rivals-top-area').style.display = 'none';
       document.getElementById('menu-overlay').style.display = 'flex';
-      document.getElementById('main-menu').style.display = 'flex';
+      
+      document.getElementById('room-waiting').style.display = 'none';
+      document.getElementById('main-menu-actions').style.display = 'flex';
       document.getElementById('com-menu').style.display = 'none';
     }
 
@@ -2044,12 +2004,12 @@
         document.getElementById('score-label').innerText = `SCORE: ${myEngine.score} | CHAIN: ${myEngine.chain}`;
         updateGarbagePreview(myEngine, 'my-garbage-preview');
       }
-      opponents.forEach((opp) => {
+      opponents.forEach((opp, i) => {
         if (opp.renderer && opp.engine) {
           opp.renderer.draw(opp.engine);
-          const scoreEl = document.getElementById(`rival-score-label-${opp.index}`);
+          const scoreEl = document.getElementById(`rival-score-label-${i}`);
           if (scoreEl) scoreEl.innerText = `SCORE: ${opp.engine.score}`;
-          updateGarbagePreview(opp.engine, `rival-garbage-preview-${opp.index}`);
+          updateGarbagePreview(opp.engine, `rival-garbage-preview-${i}`);
         }
       });
       
@@ -2169,25 +2129,6 @@
       return res;
     }
 
-    function hostStartGame() {
-      currentMatchId = Date.now();
-      realGuestCount = onlineConnections.length;
-      currentTotalPlayers = maxOnlinePlayers;
-
-      onlineConnections.forEach((c, idx) => {
-        if (c && c.open) {
-          c.send({
-            type: 'game_start',
-            matchId: currentMatchId,
-            totalPlayers: currentTotalPlayers,
-            realGuestCount: realGuestCount,
-            myPlayerIndex: idx + 1
-          });
-        }
-      });
-      startOnlineGame();
-    }
-
     function createRoom() {
       let code = document.getElementById('peer-room-id').value.trim();
       if (!code) { code = generateShortRoomCode(); document.getElementById('peer-room-id').value = code; }
@@ -2195,31 +2136,45 @@
       
       if (peer) { try { peer.destroy(); } catch(e){} }
       peer = new Peer(fullPeerId);
+      
+      const maxPlayers = parseInt(document.getElementById('online-max-players').value) || 2;
+      currentMode = 'online_host';
+      onlineConnections = [];
 
       peer.on('open', () => {
-        isHost = true;
-        myPlayerIndex = 0;
-        maxOnlinePlayers = parseInt(document.getElementById('online-player-count').value) || 2;
-        
-        document.getElementById('peer-info').innerHTML = `部屋コード: <b style="font-size:1.3rem; color:#ff007f;">${code.toUpperCase()}</b><br>参加者待機中... (0 / ${maxOnlinePlayers - 1})`;
-        document.getElementById('host-start-btn').style.display = 'block';
+        document.getElementById('main-menu-actions').style.display = 'none';
+        const waiting = document.getElementById('room-waiting');
+        waiting.style.display = 'flex';
+        document.getElementById('waiting-code-container').style.display = 'block';
+        document.getElementById('waiting-code').innerText = code.toUpperCase();
+        document.getElementById('waiting-max').innerText = maxPlayers;
+        document.getElementById('waiting-count').innerText = 1;
+        document.getElementById('waiting-status-text').innerText = '参加者を待っています...';
+        document.getElementById('force-start-btn').style.display = 'inline-block';
         navigator.clipboard?.writeText(code.toUpperCase()); 
-        showToast(`部屋コード [${code.toUpperCase()}] をコピーしました！待機中...`);
+        showToast(`部屋コード [${code.toUpperCase()}] をコピーしました！`);
       });
 
       peer.on('connection', (c) => {
-        if (onlineConnections.length >= maxOnlinePlayers - 1) {
+        if (onlineConnections.length >= maxPlayers - 1) {
           c.close(); return;
         }
         onlineConnections.push(c);
-        bindConnEvents(c);
+        bindConnEvents(c, true); 
+        document.getElementById('waiting-count').innerText = 1 + onlineConnections.length;
         
-        document.getElementById('peer-info').innerHTML = `部屋コード: <b style="font-size:1.3rem; color:#ff007f;">${code.toUpperCase()}</b><br>参加者待機中... (${onlineConnections.length} / ${maxOnlinePlayers - 1})`;
-
-        if (onlineConnections.length >= maxOnlinePlayers - 1) {
-          hostStartGame();
+        if (onlineConnections.length >= maxPlayers - 1) {
+          forceStartRoom();
         }
       });
+    }
+
+    function cancelRoom() {
+      onlineConnections.forEach(c => c.close());
+      onlineConnections = [];
+      if (peer) { peer.destroy(); peer = null; }
+      document.getElementById('room-waiting').style.display = 'none';
+      document.getElementById('main-menu-actions').style.display = 'flex';
     }
 
     function joinRoom() {
@@ -2229,93 +2184,251 @@
 
       if (peer) { try { peer.destroy(); } catch(e){} }
       peer = new Peer();
+      currentMode = 'online_client';
 
       peer.on('open', () => {
-        isHost = false;
         const c = peer.connect(targetPeerId);
         c.on('open', () => { 
           onlineConnections = [c];
-          bindConnEvents(c); 
-          document.getElementById('peer-info').innerText = 'ホストの開始を待機中...';
+          bindConnEvents(c, false); 
+          document.getElementById('main-menu-actions').style.display = 'none';
+          const waiting = document.getElementById('room-waiting');
+          waiting.style.display = 'flex';
+          document.getElementById('waiting-code-container').style.display = 'none';
+          document.getElementById('waiting-status-text').innerText = '部屋に参加しました。ホストの開始を待機中...';
+          document.getElementById('waiting-count').innerText = '-';
+          document.getElementById('waiting-max').innerText = '-';
+          document.getElementById('force-start-btn').style.display = 'none';
         });
         c.on('error', () => { showToast('部屋への接続に失敗しました'); });
       });
     }
 
-    function bindConnEvents(c) {
-      c.on('data', (data) => {
-        if (data.type === 'game_start') {
-          currentMatchId = data.matchId;
-          currentTotalPlayers = data.totalPlayers;
-          realGuestCount = data.realGuestCount;
-          myPlayerIndex = data.myPlayerIndex;
-          maxOnlinePlayers = currentTotalPlayers;
-          startOnlineGame();
+    function forceStartRoom() {
+      const maxPlayers = parseInt(document.getElementById('online-max-players').value);
+      let players = [{ id: 'host', type: 'player', name: 'HOST' }];
+      
+      onlineConnections.forEach((c, idx) => {
+        players.push({ id: `client_${idx}`, type: 'player', name: `PLAYER ${idx+1}`, conn: c });
+      });
+
+      const currentCount = players.length;
+      for(let i = 0; i < maxPlayers - currentCount; i++) {
+        players.push({ id: `com_${i}`, type: 'com', level: currentComLevel, name: `COM ${i+1}` });
+      }
+
+      onlineConnections.forEach(c => {
+        const p = players.find(pl => pl.conn === c);
+        const config = {
+          players: players.map(pl => ({ id: pl.id, type: pl.type, level: pl.level, name: pl.name })),
+          myId: p.id,
+          matchId: Date.now()
+        };
+        c.send({ type: 'start_match', config });
+      });
+
+      const hostConfig = {
+        players: players.map(pl => ({ id: pl.id, type: pl.type, level: pl.level, name: pl.name })),
+        myId: 'host',
+        matchId: Date.now()
+      };
+      startGameWithConfig(hostConfig);
+    }
+
+    function startGameWithConfig(config) {
+      currentMode = 'online';
+      currentMatchId = config.matchId;
+      myOnlineId = config.myId;
+      matchPlayersConfig = config.players;
+      matchState = 'ready';
+
+      document.getElementById('menu-overlay').style.display = 'none';
+      document.getElementById('game-area').style.display = 'flex';
+
+      setupInput();
+      resetGameLogicOnline(config);
+
+      readyBgm();
+      showReadyGo();
+
+      if (loopId) cancelAnimationFrame(loopId);
+      lastTime = performance.now();
+      accumulator = 0;
+      loopId = requestAnimationFrame(gameLoop);
+      
+      startSyncInterval();
+    }
+
+    function resetGameLogicOnline(config) {
+      isMatchOver = false;
+      myTargetIndex = -1;
+      const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
+
+      myRenderer = new BoardRenderer('my-canvas');
+      myEngine = new PonEngine(
+        (state) => { if (state === 'gameover') checkMatchEnd(); },
+        (totalBlocks, isHard) => { distributeGarbageOnline(myOnlineId, totalBlocks, isHard); },
+        handicap,
+        true
+      );
+      myEngine.garbageQueue = [];
+
+      const rivalsArea = document.getElementById('rivals-area');
+      const rivalsTopArea = document.getElementById('rivals-top-area');
+      rivalsArea.innerHTML = '';
+      rivalsTopArea.innerHTML = '';
+      opponents = [];
+
+      let index = 0;
+      config.players.forEach(p => {
+        if (p.id === myOnlineId) return;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'board-wrapper rival-board';
+        if (p.type === 'com') wrapper.classList.add('com-board');
+        wrapper.id = `rival-wrapper-${index}`;
+        const targetIdx = index;
+        wrapper.onclick = () => selectTarget(targetIdx);
+
+        let nameColor = p.type === 'com' ? '#aaaaaa' : '#e94560';
+
+        wrapper.innerHTML = `
+          <div class="garbage-preview-box">
+            <span class="preview-label">予告</span>
+            <div id="rival-garbage-preview-${index}" class="preview-list"></div>
+          </div>
+          <div class="board-header">
+            <span style="color: ${nameColor};">${p.name} <span class="target-badge">🎯 TARGET</span></span>
+            <span id="rival-score-label-${index}">SCORE: 0</span>
+          </div>
+          <div class="canvas-container"><canvas id="rival-canvas-${index}"></canvas></div>
+        `;
+        rivalsArea.appendChild(wrapper);
+
+        const rRenderer = new BoardRenderer(`rival-canvas-${index}`);
+        let rEngine = null, rAI = null;
+
+        if (p.type === 'com' && myOnlineId === 'host') {
+          rEngine = new PonEngine(
+            (state) => { if (state === 'gameover') checkMatchEnd(); },
+            (totalBlocks, isHard) => { distributeGarbageOnline(p.id, totalBlocks, isHard); },
+            3,
+            false
+          );
+          rEngine.garbageQueue = [];
+          rAI = new ComAI(rEngine, p.level || 2, p.id);
+        } else {
+          rEngine = new PonEngine(null, null, 3, false);
+          rEngine.garbageQueue = [];
         }
-        else if (data.type === 'sync') {
-          if (isHost) {
+
+        opponents.push({
+          id: p.id,
+          name: p.name,
+          type: p.type,
+          engine: rEngine,
+          renderer: rRenderer,
+          ai: rAI,
+          index: index
+        });
+        index++;
+      });
+
+      updateGarbagePreview(myEngine, 'my-garbage-preview');
+      opponents.forEach((opp, i) => updateGarbagePreview(opp.engine, `rival-garbage-preview-${i}`));
+      updateTargetUI();
+      adjustLayout();
+    }
+
+    function startSyncInterval() {
+      if (syncIntervalId) clearInterval(syncIntervalId);
+      syncIntervalId = setInterval(() => {
+        if (myEngine && !isMatchOver) {
+          const syncData = { 
+            type: 'sync', senderId: myOnlineId, grid: myEngine.grid, nextRow: myEngine.nextRow, 
+            riseOffset: myEngine.riseOffset, score: myEngine.score, 
+            garbageQueue: myEngine.garbageQueue 
+          };
+          onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
+
+          if (myOnlineId === 'host') {
+            opponents.forEach(opp => {
+              if (opp.type === 'com' && opp.engine) {
+                const comSyncData = {
+                  type: 'sync', senderId: opp.id, grid: opp.engine.grid, nextRow: opp.engine.nextRow, 
+                  riseOffset: opp.engine.riseOffset, score: opp.engine.score, 
+                  garbageQueue: opp.engine.garbageQueue 
+                };
+                onlineConnections.forEach(c => { if (c && c.open) c.send(comSyncData); });
+              }
+            });
+          }
+        }
+      }, 100);
+    }
+
+    function bindConnEvents(c, isHostMode) {
+      c.on('data', (data) => {
+        if (data.type === 'sync') {
+          const senderOpp = opponents.find(o => o.id === data.senderId);
+          if (senderOpp && senderOpp.engine && !isMatchOver) {
+            senderOpp.engine.grid = data.grid;
+            senderOpp.engine.nextRow = data.nextRow;
+            senderOpp.engine.riseOffset = data.riseOffset;
+            senderOpp.engine.score = data.score;
+            if (data.garbageQueue) senderOpp.engine.garbageQueue = data.garbageQueue;
+          }
+          if (isHostMode) {
             onlineConnections.forEach(otherC => {
               if (otherC !== c && otherC.open) otherC.send(data);
             });
           }
-          const opp = opponents.find(o => o.globalIndex === data.playerIndex);
-          if (opp && opp.engine && !isMatchOver) {
-            opp.engine.grid = data.grid;
-            opp.engine.nextRow = data.nextRow;
-            opp.engine.riseOffset = data.riseOffset;
-            opp.engine.score = data.score;
-            if (data.garbageQueue) opp.engine.garbageQueue = data.garbageQueue;
-          }
         } 
-        else if (data.type === 'attack') {
-          if (data.matchId === currentMatchId && !isMatchOver) {
-            if (isHost) {
-              onlineConnections.forEach(otherC => {
-                if (otherC !== c && otherC.open) otherC.send(data);
-              });
+        else if (data.type === 'garbage_request' && isHostMode) {
+          for (const [tId, count] of Object.entries(data.targets)) {
+            if (tId === 'host') {
+              sendBlocksToOpponent({ engine: myEngine }, count, data.isHard);
+            } else {
+              const opp = opponents.find(o => o.id === tId);
+              if (opp && opp.type === 'com') sendBlocksToOpponent(opp, count, data.isHard);
             }
-            applyAttackLocally(data);
+          }
+          onlineConnections.forEach(otherC => {
+            if (otherC.open) otherC.send({ type: 'add_garbage_multi', targets: data.targets, isHard: data.isHard });
+          });
+        }
+        else if (data.type === 'add_garbage_multi') {
+          if (data.targets[myOnlineId]) {
+            sendBlocksToOpponent({ engine: myEngine }, data.targets[myOnlineId], data.isHard);
+          }
+        }
+        else if (data.type === 'start_match') {
+          startGameWithConfig(data.config);
+        }
+        else if (data.type === 'rematch_req') {
+          if (isHostMode) {
+            // ホストは受け取ったら再戦ボタンの同期などに使うが、今回は特に何もしない（ホスト側主導で再開するため）
           }
         }
         else if (data.type === 'leave') {
-          if (isHost) {
-            onlineConnections.forEach(otherC => {
-              if (otherC !== c && otherC.open) otherC.send(data);
-            });
-          }
-          const opp = opponents.find(o => o.globalIndex === data.playerIndex);
-          if (opp && opp.engine) {
-            opp.engine.gameOver = true;
+          const senderOpp = opponents.find(o => (data.senderId && o.id === data.senderId) || (isHostMode && o.id !== 'host'));
+          if (senderOpp && senderOpp.engine) {
+            senderOpp.engine.gameOver = true;
             checkMatchEnd();
-          }
-        }
-        else if (data.type === 'rematch_req') {
-          if (isHost) {
-            rematchReady[data.playerIndex] = true;
-            let allReady = rematchReady.me;
-            for (let i = 1; i <= realGuestCount; i++) {
-              if (!rematchReady[i]) allReady = false;
-            }
-            if (allReady) hostStartGame();
           }
         }
       });
       c.on('close', () => {
-        const leaveData = { type: 'leave', playerIndex: isHost ? (onlineConnections.indexOf(c) + 1) : 0 };
-        if (isHost) {
-          onlineConnections.forEach(otherC => {
-            if (otherC !== c && otherC.open) otherC.send(leaveData);
-          });
-          const opp = opponents.find(o => o.globalIndex === leaveData.playerIndex);
-          if (opp && opp.engine) {
-            opp.engine.gameOver = true;
-            checkMatchEnd();
-          }
-        } else {
-          const opp = opponents.find(o => o.globalIndex === 0);
-          if (opp && opp.engine) {
-            opp.engine.gameOver = true;
-            checkMatchEnd();
+        // 切断時
+        if (isHostMode) {
+          const index = onlineConnections.indexOf(c);
+          if (index !== -1) {
+             const leftId = `client_${index}`;
+             const opp = opponents.find(o => o.id === leftId);
+             if (opp && opp.engine) {
+               opp.engine.gameOver = true;
+               checkMatchEnd();
+             }
           }
         }
       });
@@ -2357,8 +2470,8 @@
         if (isLeft) { exitBtn.style.right = '15px'; exitBtn.style.left = 'auto'; }
         else { exitBtn.style.left = '15px'; exitBtn.style.right = 'auto'; }
 
-        opponents.forEach((opp) => {
-          const el = document.getElementById(`rival-wrapper-${opp.index}`);
+        opponents.forEach((_, i) => {
+          const el = document.getElementById(`rival-wrapper-${i}`);
           if (el) {
             if (el.parentNode !== rivalsArea) rivalsArea.appendChild(el);
             el.style.order = '';
@@ -2400,8 +2513,8 @@
         myWrapper.style.transform = `scale(${scale})`;
         myWrapper.style.margin = `0 ${(baseBoardW - baseBoardW * scale) / -2}px`;
 
-        opponents.forEach((opp) => {
-          const el = document.getElementById(`rival-wrapper-${opp.index}`);
+        opponents.forEach((_, i) => {
+          const el = document.getElementById(`rival-wrapper-${i}`);
           if (el) {
             el.style.transform = `scale(${scale})`;
             el.style.margin = `0 ${(baseBoardW - baseBoardW * scale) / -2}px`;
@@ -2435,7 +2548,7 @@
         gameContainer.style.paddingTop = '0px';
 
         if (oppCount === 1) {
-          const rivalWrapper = document.getElementById(`rival-wrapper-${opponents[0].index}`);
+          const rivalWrapper = document.getElementById('rival-wrapper-0');
           if (rivalWrapper) {
             if (rivalWrapper.parentNode !== controls) {
               controls.insertBefore(rivalWrapper, controls.firstChild);
@@ -2513,8 +2626,8 @@
         const scaleW = availW / (oppCount * 224 + (oppCount - 1) * 6);
         const miniScale = Math.min(scaleH, scaleW, 0.42);
 
-        opponents.forEach((opp) => {
-          const el = document.getElementById(`rival-wrapper-${opp.index}`);
+        opponents.forEach((_, i) => {
+          const el = document.getElementById(`rival-wrapper-${i}`);
           if (el) {
             if (el.parentNode !== rivalsTopArea) rivalsTopArea.appendChild(el);
             el.style.order = '';
