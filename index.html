@@ -184,7 +184,7 @@
           <option value="1">1: 不利 (激ムズ)</option>
           <option value="2">2: やや不利</option>
           <option value="3" selected>3: 普通</option>
-          <option value="4">4: や平有利</option>
+          <option value="4">4: やや有利</option>
           <option value="5">5: 有利 (やさしい)</option>
         </select>
       </div>
@@ -346,8 +346,12 @@
     if (savedSeVol !== null) SE.volume = parseFloat(savedSeVol);
     const savedBgmVol = localStorage.getItem('pdw_bgm_vol');
     let initBgmVol = savedBgmVol !== null ? parseFloat(savedBgmVol) : 0.5;
+    
+    // mutedを使用してiOS等でvolume変更が効かなくても確実に切り替える
     bgmAudio.volume = initBgmVol;
-    panicBgmAudio.volume = 0; // isPanic is initially false
+    bgmAudio.muted = false;
+    panicBgmAudio.volume = initBgmVol; 
+    panicBgmAudio.muted = true; // 最初は通常BGMのみ鳴る
 
     document.getElementById('se-volume').value = SE.volume;
     document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
@@ -359,14 +363,18 @@
       document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
       localStorage.setItem('pdw_se_vol', SE.volume);
     });
+    
     document.getElementById('bgm-volume').addEventListener('input', (e) => {
       const vol = parseFloat(e.target.value);
+      bgmAudio.volume = vol;
+      panicBgmAudio.volume = vol;
+      
       if (isPanic) {
-        bgmAudio.volume = 0;
-        panicBgmAudio.volume = vol;
+        bgmAudio.muted = true;
+        panicBgmAudio.muted = false;
       } else {
-        bgmAudio.volume = vol;
-        panicBgmAudio.volume = 0;
+        bgmAudio.muted = false;
+        panicBgmAudio.muted = true;
       }
       document.getElementById('bgm-volume-val').innerText = Math.floor(vol * 100);
       localStorage.setItem('pdw_bgm_vol', vol);
@@ -400,8 +408,10 @@
         bgmAudio.loop = false;
         
         let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
-        bgmAudio.volume = isPanic ? 0 : bgmVol;
-        panicBgmAudio.volume = isPanic ? bgmVol : 0;
+        bgmAudio.volume = bgmVol;
+        panicBgmAudio.volume = bgmVol;
+        bgmAudio.muted = isPanic;
+        panicBgmAudio.muted = !isPanic;
 
         bgmAudio.play().then(() => { 
           panicBgmAudio.play().catch(()=>{});
@@ -460,8 +470,11 @@
       isPanic = false;
       
       let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
-      bgmAudio.volume = 0; 
-      panicBgmAudio.volume = 0;
+      bgmAudio.volume = bgmVol; 
+      panicBgmAudio.volume = bgmVol;
+      // 再生待ちの間は確実にミュートにしておく
+      bgmAudio.muted = true;
+      panicBgmAudio.muted = true;
       
       const p1 = bgmAudio.play();
       if (p1 !== undefined) {
@@ -470,7 +483,7 @@
             bgmAudio.pause();
             bgmAudio.currentTime = 0;
           } else {
-            bgmAudio.volume = isPanic ? 0 : bgmVol;
+            bgmAudio.muted = isPanic;
           }
         }).catch(e => console.warn(e));
       }
@@ -482,7 +495,7 @@
             panicBgmAudio.pause();
             panicBgmAudio.currentTime = 0;
           } else {
-            panicBgmAudio.volume = isPanic ? bgmVol : 0;
+            panicBgmAudio.muted = !isPanic;
           }
         }).catch(e => console.warn(e));
       }
@@ -493,8 +506,10 @@
       isBgmPlaying = true;
       let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
 
-      bgmAudio.volume = isPanic ? 0 : bgmVol;
-      panicBgmAudio.volume = isPanic ? bgmVol : 0;
+      bgmAudio.volume = bgmVol;
+      panicBgmAudio.volume = bgmVol;
+      bgmAudio.muted = isPanic;
+      panicBgmAudio.muted = !isPanic;
 
       bgmAudio.play().catch(e => console.warn(e));
       panicBgmAudio.play().catch(e => console.warn(e));
@@ -532,8 +547,10 @@
         bgmAudio.currentTime = 0;
         
         let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
-        bgmAudio.volume = isPanic ? 0 : bgmVol;
-        panicBgmAudio.volume = isPanic ? bgmVol : 0;
+        bgmAudio.volume = bgmVol;
+        panicBgmAudio.volume = bgmVol;
+        bgmAudio.muted = isPanic;
+        panicBgmAudio.muted = !isPanic;
         
         bgmAudio.play().then(() => {
           panicBgmAudio.play().catch(()=>{});
@@ -1749,14 +1766,19 @@
       if (!myEngine || matchState !== 'playing' || isMatchOver) return;
       
       let panic = false;
+      // 高さ70%以上ということは、上から30%以下の位置にブロックが到達した場合
+      const panicThresholdR = ROWS * 0.3; // 12 * 0.3 = 3.6
+
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
           const b = myEngine.grid[r][c];
           if (b !== null) {
-            // ブロック落下中等の状態は判定に含めない
+            // 接地済みブロックのみ判定対象（落下中 fall や消去中 match などは含めない）
             if (b.state === 'normal') {
-              if ((r - myEngine.riseOffset) <= ROWS * 0.3) {
-                panic = true; break;
+              // 実際の表示上の行位置 (r - riseOffset) が閾値以下なら高さ70%以上に達している
+              if ((r - myEngine.riseOffset) <= panicThresholdR) {
+                panic = true; 
+                break;
               }
             }
           }
@@ -1778,17 +1800,20 @@
       let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
       const isCustomBgm = (bgmPlaylist.length > 0);
 
+      bgmAudio.volume = bgmVol;
+      panicBgmAudio.volume = bgmVol;
+
       if (toPanic) {
-        bgmAudio.volume = 0;
-        panicBgmAudio.volume = bgmVol;
+        bgmAudio.muted = true;
+        panicBgmAudio.muted = false;
         if (!isCustomBgm) {
           if (Math.abs(bgmAudio.currentTime - panicBgmAudio.currentTime) > 0.2) {
             panicBgmAudio.currentTime = bgmAudio.currentTime;
           }
         }
       } else {
-        panicBgmAudio.volume = 0;
-        bgmAudio.volume = bgmVol;
+        panicBgmAudio.muted = true;
+        bgmAudio.muted = false;
         if (!isCustomBgm) {
           if (Math.abs(bgmAudio.currentTime - panicBgmAudio.currentTime) > 0.2) {
             bgmAudio.currentTime = panicBgmAudio.currentTime;
