@@ -1807,6 +1807,7 @@
        };
     }
 
+    // 勝利・敗北判定を修正：自分が負けた際も全体が終了するまでは他者の演算・同期を止めないように
     function checkMatchEnd() {
       if (matchState === 'gameover') return;
 
@@ -1814,12 +1815,24 @@
 
       if (myEngine && myEngine.gameOver && !isMatchOver && !isPracticeMode) {
         isMatchOver = true;
+        
+        // 自分が負けたことを即座に他者へ送信し、同期漏れを防止
+        if (currentMode.startsWith('online')) {
+           const syncData = { 
+             type: 'sync', senderId: myOnlineId, grid: myEngine.grid, nextRow: myEngine.nextRow, 
+             riseOffset: myEngine.riseOffset, score: myEngine.score, 
+             garbageQueue: myEngine.garbageQueue, gameOver: true
+           };
+           onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
+        }
+
         if (currentMode === 'single') {
            matchState = 'gameover';
            stopAllEngines();
            showResultModal("GAME OVER");
         } else {
            if (currentMode === 'com') stopAllEngines();
+           // オンラインモード時は他者の試合が続くため stopAllEngines() は呼ばない
            showResultModal("LOSE...");
         }
       }
@@ -1827,6 +1840,7 @@
       if (isMatchOver) {
          if (aliveOpponents.length === 0) {
             matchState = 'gameover';
+            stopAllEngines();
             if (hostDisconnected) {
                setTimeout(() => { showToast("ホストが退出済みのため解散します。"); exitGame(); }, 3000);
             } else if (myOnlineId === 'host' && isPracticeMode) {
@@ -1837,6 +1851,17 @@
          if (opponents.length > 0 && aliveOpponents.length === 0) {
             isMatchOver = true;
             matchState = 'gameover';
+            
+            // 自分が勝った状態も即座に同期（盤面確定）
+            if (currentMode.startsWith('online')) {
+               const syncData = { 
+                 type: 'sync', senderId: myOnlineId, grid: myEngine.grid, nextRow: myEngine.nextRow, 
+                 riseOffset: myEngine.riseOffset, score: myEngine.score, 
+                 garbageQueue: myEngine.garbageQueue, gameOver: myEngine.gameOver
+               };
+               onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
+            }
+
             stopAllEngines();
             showResultModal("WIN!!");
             if (hostDisconnected) {
@@ -2164,6 +2189,7 @@
     let lastTime = 0, accumulator = 0;
     const FIXED_TIME_STEP = 1000 / 60;
 
+    // ゲームループを修正：対戦が全体終了（gameover）するまでは他者のAI・エンジンを動かし続ける
     function gameLoop(time) {
       let deltaTime = time - lastTime;
       if (deltaTime > 100) deltaTime = 100;
@@ -2171,11 +2197,11 @@
       accumulator += deltaTime;
       
       while (accumulator >= FIXED_TIME_STEP) {
-        if (!isMatchOver || isPracticeMode) {
+        if (matchState !== 'gameover' || isPracticeMode) {
           pollGamepadInput();
           if (myEngine) myEngine.update();
         }
-        if (!isMatchOver || isPracticeMode) {
+        if (matchState !== 'gameover' || isPracticeMode) {
           opponents.forEach(opp => {
             if (opp.ai) opp.ai.update();
             if (opp.engine && !opp.engine.gameOver) opp.engine.update();
@@ -2566,11 +2592,13 @@
       adjustLayout();
     }
 
+    // 同期処理を修正：自身が負けても、全体が終わるまでは同期を継続
     function startSyncInterval() {
       if (syncIntervalId) clearInterval(syncIntervalId);
       syncIntervalId = setInterval(() => {
-        if (myEngine && !isMatchOver) {
-          if (!isPracticeMode) {
+        if (matchState !== 'gameover') {
+          // 自分の同期 (プラクティス中になれば送らない)
+          if (myEngine && !isPracticeMode) {
              const syncData = { 
                type: 'sync', senderId: myOnlineId, grid: myEngine.grid, nextRow: myEngine.nextRow, 
                riseOffset: myEngine.riseOffset, score: myEngine.score, 
@@ -2579,6 +2607,7 @@
              onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
           }
 
+          // COMの同期 (ホストの場合、ホストが負けてもCOMの同期を継続)
           if (myOnlineId === 'host') {
             opponents.forEach(opp => {
               if (opp.type === 'com' && opp.engine) {
