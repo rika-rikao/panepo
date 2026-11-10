@@ -38,37 +38,33 @@
     .input-box { padding: 10px; border-radius: 20px; border: 2px solid #4ecca3; background: #162447; color: #fff; text-align: center; width: 240px; outline: none; }
     
     /* ===================================================
-       設定画面モーダル (修正版レイアウト)
+       設定画面モーダル (根本から見直し版)
        =================================================== */
     #settings-overlay {
       position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100dvh; 
+      top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0, 0, 0, 0.9);
       z-index: 300;
       display: none; /* JSで display: block; に切り替える */
-      box-sizing: border-box;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      overscroll-behavior: contain;
-      /* 上下に適度な余白を持たせ、要素が長い時はスクロールできるようにする */
-      padding: max(20px, env(safe-area-inset-top)) 20px 40px 20px;
+      padding: 0;
     }
 
     .settings-box {
-      box-sizing: border-box;
       background: #162447;
       border-radius: 14px;
       border: 2px solid #4ecca3;
-      width: 100%;
+      width: 90%;
       max-width: 450px;
-      margin: 0 auto; /* 親が block のため、左右中央寄せしつつ上からはpaddingの隙間で配置 */
+      /* 上に最低40px、下に最低80pxの余白を設けることでアドレスバーを回避 */
+      margin: max(40px, env(safe-area-inset-top)) auto 80px auto; 
       padding: 18px;
       gap: 12px;
       line-height: 1.35;
       display: flex;
       flex-direction: column;
+      box-sizing: border-box;
     }
 
     .settings-box h2, .settings-box h3, .settings-box p { margin: 0; }
@@ -680,16 +676,25 @@
               targetCells = cells.filter(item => item.r === maxR); 
             }
 
+            // 下の段 (rが大きい) ほど先に消えるようにソート、同じ段なら左 (cが小さい) から
             targetCells.sort((a, b) => {
-              if (b.c !== a.c) return b.c - a.c;
-              return b.r - a.r;
+              if (b.r !== a.r) return b.r - a.r;
+              return a.c - b.c;
             });
 
             const transformGroupId = Date.now() + Math.random();
 
-            targetCells.forEach((item, idx) => {
+            let currentR = targetCells.length > 0 ? targetCells[0].r : 0;
+            let currentDelay = 0;
+
+            targetCells.forEach((item) => {
+              // 段が変わるごとに遅延を追加
+              if (item.r !== currentR) {
+                currentR = item.r;
+                currentDelay += 6; 
+              }
               item.b.state = 'transforming';
-              item.b.transformDelay = idx * 6; 
+              item.b.transformDelay = currentDelay;
               item.b.transformToNormal = !isHardGroup;
               item.b.transformGroupId = transformGroupId;
             });
@@ -1339,6 +1344,7 @@
     let loopId = null, syncIntervalId = null;
     let matchState = 'ready'; // 'ready', 'playing', 'gameover'
     let isPanic = false, mainBgmTime = 0;
+    let currentMatchId = 0; // 古い通信(お邪魔等)を弾くためのマッチ管理ID
 
     function showToast(msg) { 
       const t = document.getElementById('toast'); 
@@ -1435,7 +1441,7 @@
 
       if (currentMode.startsWith('online') && senderId === 'player') {
         onlineConnections.forEach(c => {
-          if (c && c.open) c.send({ type: 'distribute_garbage', totalBlocks, isHard, targetOppId });
+          if (c && c.open) c.send({ type: 'distribute_garbage', totalBlocks, isHard, targetOppId, matchId: currentMatchId });
         });
       }
     }
@@ -1579,6 +1585,19 @@
     function checkPanic() {
       if (!myEngine || matchState !== 'playing' || isMatchOver) return;
       
+      // 落下中または変化中のブロックがあれば判定を保留する（ドスンと落ちた直後に判定するため）
+      let isFalling = false;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const b = myEngine.grid[r][c];
+          if (b && (b.state === 'fall' || b.state === 'hover' || b.state === 'transforming' || b.state === 'transforming_wait' || b.state === 'transformed_wait')) {
+             isFalling = true; break;
+          }
+        }
+        if (isFalling) break;
+      }
+      if (isFalling) return;
+      
       let panic = false;
       // ROWS=12 の 75% は上から3段目（index 0, 1, 2）。いずれかにブロックがあればピンチ。
       for (let r = 0; r <= 2; r++) {
@@ -1647,6 +1666,8 @@
     function resetGameLogic() {
       isMatchOver = false;
       myTargetIndex = -1;
+      currentMatchId = Date.now(); // 再戦時に古い通信などを弾くためのマッチID
+      
       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
       
       myRenderer = new BoardRenderer('my-canvas'); 
@@ -2032,7 +2053,8 @@
             if (data.garbageQueue) opponents[index].engine.garbageQueue = data.garbageQueue;
           }
         } else if (data.type === 'distribute_garbage') {
-          if (myEngine && !isMatchOver) {
+          // matchIdが一致する通信のみ適用（ラグによる前試合のお邪魔ブロック送信を防ぐ）
+          if (myEngine && !isMatchOver && data.matchId === currentMatchId) {
             let myBlocks = 0;
             if (data.targetOppId === 'player') {
               myBlocks = Math.floor(data.totalBlocks * 0.5);
