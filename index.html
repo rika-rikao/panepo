@@ -20,9 +20,11 @@
       touch-action: none;
     }
     
-    :focus-visible, button:focus, select:focus, input:focus {
+    /* パッド操作時のフォーカス用 */
+    :focus {
       outline: 3px solid #ff007f !important;
-      outline-offset: 2px !important;
+      box-shadow: 0 0 10px #ff007f !important;
+      border-radius: inherit;
     }
 
     .small-btn { background: #0f3460; color: #fff; border: 1px solid #4ecca3; padding: 6px 12px; font-size: 0.9rem; border-radius: 15px; cursor: pointer; }
@@ -93,11 +95,12 @@
       transition: transform 0.1s ease-out, border 0.2s, box-shadow 0.2s;
       position: relative;
     }
-    .board-header { font-size: 0.95rem; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; width: 100%; }
     
-    /* 自分の枠を緑色に */
-    #my-wrapper .canvas-container { border-color: #00e676 !important; }
+    /* 自分のボード用の緑色装飾 */
+    .my-board .canvas-container { border-color: #00e676 !important; box-shadow: 0 0 15px rgba(0, 230, 118, 0.8) !important; }
+    .my-board .board-header #player-label { color: #00e676 !important; }
 
+    .board-header { font-size: 0.95rem; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; width: 100%; }
     .canvas-container { 
       border: 4px solid #3282b8; border-bottom: none; border-radius: 6px 6px 0 0; 
       background: #000; box-shadow: 0 0 15px rgba(0,0,0,0.8); overflow: hidden; 
@@ -140,6 +143,12 @@
     <div id="ready-go-text" style="font-size: 5rem; font-weight: 900; color: #ff007f; text-shadow: 0 0 15px rgba(255,255,255,0.8), 0 0 30px #e94560; opacity: 0; transform: scale(0.5); font-style: italic;"></div>
   </div>
 
+  <div id="countdown-overlay" style="display:none; position:absolute; inset:0; background:rgba(0,0,0,0.92); z-index:450; flex-direction:column; align-items:center; justify-content:center;">
+    <h2 style="color:#00d4ff; font-size: 2rem;">プレイヤーが揃いました！</h2>
+    <div id="countdown-text" style="font-size: 6rem; font-weight: bold; color: #ff007f; margin: 20px 0;">10</div>
+    <button id="countdown-start-btn" class="btn" onclick="forceStartRoom()">すぐに開始</button>
+  </div>
+
   <div id="settings-overlay">
     <div class="settings-box">
       <h2 style="text-align: center; color: #4ecca3; flex-shrink: 0;">設定</h2>
@@ -148,8 +157,8 @@
         <h3>🎵 音声設定</h3>
         <p style="font-size:0.8rem; color:#aaa; margin-bottom: 5px;">マイBGM（ファイルやフォルダを選択して再生）</p>
         <div style="display:flex; gap:10px; margin-bottom: 10px;">
-          <label class="small-btn">ファイル選択<input type="file" id="bgm-file-input" multiple accept="audio/*, .mp3, .m4a, .aac, .wav, .ogg, .opus, .webm" style="display:none;"></label>
-          <label class="small-btn">フォルダ選択<input type="file" id="bgm-dir-input" multiple webkitdirectory directory accept="audio/*, .mp3, .m4a, .aac, .wav, .ogg, .opus, .webm" style="display:none;"></label>
+          <label class="small-btn">ファイル選択<input type="file" tabindex="-1" id="bgm-file-input" multiple accept="audio/*, .mp3, .m4a, .aac, .wav, .ogg, .opus, .webm" style="display:none;"></label>
+          <label class="small-btn">フォルダ選択<input type="file" tabindex="-1" id="bgm-dir-input" multiple webkitdirectory directory accept="audio/*, .mp3, .m4a, .aac, .wav, .ogg, .opus, .webm" style="display:none;"></label>
           <button class="small-btn" onclick="toggleBgmPlay()">再生 / 停止</button>
         </div>
         <div style="font-size: 0.9rem;">
@@ -227,7 +236,7 @@
         <div id="waiting-code-container">部屋コード: <b id="waiting-code" style="font-size:1.4rem; color:#ff007f;"></b></div>
         <div id="waiting-status-text" style="color:#fff;"></div>
         <div>参加者: <span id="waiting-count" style="font-weight:bold; color:#fff;">1</span> / <span id="waiting-max" style="font-weight:bold; color:#fff;">2</span> 人</div>
-        <button id="force-start-btn" class="btn" style="padding:10px 16px; font-size:1rem; margin-top:10px; display:none;" onclick="forceStartRoom()">この人数で開始(不足はCOM)</button>
+        <button id="force-start-btn" class="btn" style="padding:10px 16px; font-size:1rem; margin-top:10px; display:none;" onclick="startCountdown()">この人数で開始(不足はCOM)</button>
         <button class="btn" style="padding:8px 16px; font-size:0.9rem; background:#444; border-color:#888;" onclick="cancelRoom()">キャンセル</button>
       </div>
 
@@ -258,15 +267,15 @@
     <div id="game-container">
       <div id="controls-container" style="display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; z-index: 20; width: 110px;">
         <label id="handedness-wrapper" class="switch-wrapper" style="background: rgba(0,0,0,0.85); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid #4ecca3;">
-          <input type="checkbox" id="handedness-toggle" onchange="toggleHandedness()"> <span id="handedness-text" style="font-size: 0.75rem;">右利きモード</span>
+          <input type="checkbox" id="handedness-toggle" tabindex="-1" onchange="toggleHandedness()"> <span id="handedness-text" style="font-size: 0.75rem;">右利きモード</span>
         </label>
         <label id="swipe-wrapper" class="switch-wrapper" style="background: rgba(0,0,0,0.65); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid rgba(255,255,255,0.1);">
-          <input type="checkbox" id="continuous-swipe" checked>連続移動
+          <input type="checkbox" id="continuous-swipe" tabindex="-1" checked>連続移動
         </label>
-        <button class="action-btn" id="rise-btn" style="height: 60px; font-size: 1.05rem; box-shadow: 0 4px #8a0c24;">せり上げ</button>
+        <button class="action-btn" id="rise-btn" tabindex="-1" style="height: 60px; font-size: 1.05rem; box-shadow: 0 4px #8a0c24;">せり上げ</button>
       </div>
 
-      <div class="board-wrapper" id="my-wrapper">
+      <div class="board-wrapper my-board" id="my-wrapper">
         <div class="garbage-preview-box">
           <span class="preview-label">予告</span>
           <div id="my-garbage-preview" class="preview-list"></div>
@@ -359,7 +368,7 @@
     bgmAudio.volume = initBgmVol;
     bgmAudio.muted = false;
     panicBgmAudio.volume = initBgmVol; 
-    panicBgmAudio.muted = true;
+    panicBgmAudio.muted = true; 
 
     document.getElementById('se-volume').value = SE.volume;
     document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
@@ -522,7 +531,7 @@
       panicBgmAudio.play().catch(e => console.warn(e));
     }
 
-    // --- コンフィグ管理 ---
+    // --- コンフィグ・ゲームパッド管理 ---
     let keyConfig = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Swap: 'Space', Rise: 'ShiftLeft', Target: 'KeyE' };
     let padConfig = { Up: 12, Down: 13, Left: 14, Right: 15, Swap: 0, Rise: 5, Target: 4 };
     
@@ -590,71 +599,67 @@
       });
     }
 
-    // ==========================================
-    // メニュー用のゲームパッド監視
-    // ==========================================
-    let lastPadMenuState = {};
-    function pollMenuGamepad() {
+    // ゲームパッドによるメニュー操作用グローバルループ
+    let globalPadPrevState = {};
+    setInterval(() => {
       const pad = navigator.getGamepads()[0];
       if (!pad) return;
-
-      const justPressed = (btnIdx) => pad.buttons[btnIdx]?.pressed && !lastPadMenuState[btnIdx];
-
-      const isMenuVisible = document.getElementById('menu-overlay').style.display !== 'none' ||
-                            document.getElementById('result-overlay').style.display !== 'none' ||
-                            document.getElementById('settings-overlay').style.display === 'block';
-
-      if (isMenuVisible && matchState !== 'playing') {
-        const focusables = Array.from(document.querySelectorAll('button:not([disabled]), select, input'));
-        const visibleFocusables = focusables.filter(el => {
-          return el.offsetWidth > 0 && el.offsetHeight > 0 && window.getComputedStyle(el).visibility !== 'hidden';
-        });
-
-        if (visibleFocusables.length > 0) {
-          let currentIndex = visibleFocusables.indexOf(document.activeElement);
-          let moved = false;
-
-          // 十字キー上(12) or 左(14)
-          if (justPressed(12) || justPressed(14)) { currentIndex--; moved = true; }
-          // 十字キー下(13) or 右(15)
-          if (justPressed(13) || justPressed(15)) { currentIndex++; moved = true; }
-
-          if (moved) {
-            if (currentIndex < 0) currentIndex = visibleFocusables.length - 1;
-            if (currentIndex >= visibleFocusables.length) currentIndex = 0;
-            visibleFocusables[currentIndex].focus();
-            try { SE.play('cursorMove'); } catch(e){}
-          }
-
-          // Aボタン(0)
-          if (justPressed(0)) {
-            if (document.activeElement && typeof document.activeElement.click === 'function') {
-              document.activeElement.click();
-            }
-          }
-        }
-      }
-
-      pad.buttons.forEach((b, i) => lastPadMenuState[i] = b.pressed);
-    }
-
-    setInterval(() => {
-      pollMenuGamepad();
+      let pressed = {};
+      pad.buttons.forEach((b, i) => pressed[i] = b.pressed);
       
       if (assigningAction && assignType === 'pad') {
-        const pad = navigator.getGamepads()[0];
-        if (pad) {
-          pad.buttons.forEach((b, i) => {
-            if (b.pressed) {
-              padConfig[assigningAction] = i;
-              assigningAction = null;
-              renderConfigUI();
+        const pIdx = Object.keys(pressed).find(i => pressed[i]);
+        if (pIdx !== undefined) {
+          padConfig[assigningAction] = parseInt(pIdx);
+          assigningAction = null;
+          renderConfigUI();
+        }
+      } else {
+        const justPressed = (btnIdx) => btnIdx !== null && pressed[btnIdx] && !globalPadPrevState[btnIdx];
+        
+        if (matchState !== 'playing') {
+          if (justPressed(padConfig.Up) || justPressed(padConfig.Left)) {
+            moveMenuFocus(-1);
+          }
+          if (justPressed(padConfig.Down) || justPressed(padConfig.Right)) {
+            moveMenuFocus(1);
+          }
+          if (justPressed(padConfig.Swap)) {
+            if (document.activeElement && document.activeElement.click) {
+              document.activeElement.click();
+              SE.play('cursorMove');
             }
-          });
+          }
         }
       }
+      globalPadPrevState = { ...pressed };
     }, 1000 / 30);
 
+    function moveMenuFocus(dir) {
+      const focusables = Array.from(document.querySelectorAll('button, select, input, [tabindex]:not([tabindex="-1"])'))
+        .filter(el => {
+          if (el.disabled) return false;
+          let style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') return false;
+          let parent = el.parentElement;
+          while(parent) {
+            if (window.getComputedStyle(parent).display === 'none') return false;
+            parent = parent.parentElement;
+          }
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+      if (focusables.length === 0) return;
+      let idx = focusables.indexOf(document.activeElement);
+      if (idx === -1) idx = 0;
+      else {
+        idx += dir;
+        if (idx < 0) idx = focusables.length - 1;
+        if (idx >= focusables.length) idx = 0;
+      }
+      focusables[idx].focus();
+      SE.play('cursorMove');
+    }
 
     // ==========================================
     // ゲームエンジン
@@ -1530,6 +1535,7 @@
     let loopId = null, syncIntervalId = null;
     let matchState = 'ready'; // 'ready', 'playing', 'gameover'
     let currentMatchId = 0;
+    let countdownTimer = null;
 
     function showToast(msg) { 
       const t = document.getElementById('toast'); 
@@ -1582,7 +1588,6 @@
       });
     }
 
-    // 通常のローカル/COM対戦用
     function distributeGarbage(senderId, totalBlocks, isHard) {
       if (isMatchOver) return;
       if (currentMode.startsWith('online')) {
@@ -1630,7 +1635,6 @@
       }
     }
 
-    // オンライン対戦用
     function distributeGarbageOnline(senderId, totalBlocks, isHard) {
       if (isMatchOver) return;
 
@@ -1707,9 +1711,8 @@
       btn.disabled = false;
       btn.innerText = 'もう一度対戦する';
       document.getElementById('result-overlay').style.display = 'flex';
-      
-      // ゲームパッド用フォーカスリセットのため一度他のフォーカスを外す
-      document.activeElement?.blur();
+      if (document.activeElement) document.activeElement.blur();
+      btn.focus();
     }
 
     function requestRematch() {
@@ -1824,7 +1827,7 @@
       if (!myEngine || matchState !== 'playing' || isMatchOver) return;
       
       let panic = false;
-      const panicThresholdR = ROWS * 0.3; // 上から30%以下
+      const panicThresholdR = ROWS * 0.3; 
 
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
@@ -1853,7 +1856,6 @@
     function switchBgmToPanic(toPanic) {
       if (!isBgmIntendedToPlay) return;
       let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
-      const isCustomBgm = (bgmPlaylist.length > 0);
 
       bgmAudio.volume = bgmVol;
       panicBgmAudio.volume = bgmVol;
@@ -1861,32 +1863,22 @@
       if (toPanic) {
         bgmAudio.muted = true;
         panicBgmAudio.muted = false;
-        if (!isCustomBgm) {
-          if (Math.abs(bgmAudio.currentTime - panicBgmAudio.currentTime) > 0.2) {
-            panicBgmAudio.currentTime = bgmAudio.currentTime;
-          }
-        }
+        panicBgmAudio.currentTime = 0; // ピンチBGMは毎回最初から再生する
       } else {
         panicBgmAudio.muted = true;
         bgmAudio.muted = false;
-        if (!isCustomBgm) {
-          if (Math.abs(bgmAudio.currentTime - panicBgmAudio.currentTime) > 0.2) {
-            bgmAudio.currentTime = panicBgmAudio.currentTime;
-          }
-        }
       }
     }
 
     function startGame(mode, level = 1, totalPlayers = 2) {
-      // ゲストでもホストでもゲーム開始時は確実にモーダル類を閉じる
-      document.getElementById('result-overlay').style.display = 'none';
-      document.getElementById('menu-overlay').style.display = 'none';
-      document.getElementById('game-area').style.display = 'flex';
-
+      document.getElementById('result-overlay').style.display = 'none'; 
       currentMode = mode;
       currentComLevel = level;
       currentTotalPlayers = totalPlayers;
       matchState = 'ready';
+      
+      document.getElementById('menu-overlay').style.display = 'none';
+      document.getElementById('game-area').style.display = 'flex';
       
       setupInput();
       resetGameLogic();
@@ -2011,7 +2003,9 @@
       
       if (syncIntervalId) { clearInterval(syncIntervalId); syncIntervalId = null; }
       if (loopId) { cancelAnimationFrame(loopId); loopId = null; }
+      if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
 
+      document.getElementById('countdown-overlay').style.display = 'none';
       document.getElementById('result-overlay').style.display = 'none';
       document.getElementById('game-area').style.display = 'none';
       document.getElementById('rivals-area').style.display = 'none';
@@ -2248,7 +2242,7 @@
       });
 
       peer.on('connection', (c) => {
-        // 通信経路が完全に確立されるのを待ってから開始判定を行う
+        // コネクションが完全に確立（open）するまで待ってから人数に加算
         c.on('open', () => {
           if (onlineConnections.length >= maxPlayers - 1) {
             c.close(); return;
@@ -2258,8 +2252,7 @@
           document.getElementById('waiting-count').innerText = 1 + onlineConnections.length;
           
           if (onlineConnections.length >= maxPlayers - 1) {
-            // クライアント側でのリスナー登録を確実に完了させるためのわずかな遅延
-            setTimeout(() => { forceStartRoom(); }, 500);
+            startCountdown();
           }
         });
       });
@@ -2300,7 +2293,39 @@
       });
     }
 
+    function startCountdown() {
+      if (countdownTimer) clearInterval(countdownTimer);
+      document.getElementById('countdown-overlay').style.display = 'flex';
+      document.getElementById('countdown-text').innerText = '10';
+
+      if (myOnlineId === 'host' || currentMode === 'online_host') {
+        document.getElementById('countdown-start-btn').style.display = 'inline-block';
+        document.getElementById('countdown-start-btn').focus();
+        onlineConnections.forEach(c => {
+          if (c.open) c.send({ type: 'start_countdown' });
+        });
+      } else {
+        document.getElementById('countdown-start-btn').style.display = 'none';
+      }
+
+      let count = 10;
+      countdownTimer = setInterval(() => {
+        count--;
+        if (count >= 0) {
+          document.getElementById('countdown-text').innerText = count;
+        } else {
+          clearInterval(countdownTimer);
+          if (myOnlineId === 'host' || currentMode === 'online_host') {
+            forceStartRoom();
+          }
+        }
+      }, 1000);
+    }
+
     function forceStartRoom() {
+      if (countdownTimer) clearInterval(countdownTimer);
+      document.getElementById('countdown-overlay').style.display = 'none';
+
       const maxPlayers = parseInt(document.getElementById('online-max-players').value);
       let players = [{ id: 'host', type: 'player', name: 'HOST' }];
       
@@ -2332,16 +2357,18 @@
     }
 
     function startGameWithConfig(config) {
-      // ゲストでもホストでも確実にモーダル類を閉じる
+      if (countdownTimer) clearInterval(countdownTimer);
+      document.getElementById('countdown-overlay').style.display = 'none';
       document.getElementById('result-overlay').style.display = 'none';
-      document.getElementById('menu-overlay').style.display = 'none';
-      document.getElementById('game-area').style.display = 'flex';
 
       currentMode = 'online';
       currentMatchId = config.matchId;
       myOnlineId = config.myId;
       matchPlayersConfig = config.players;
       matchState = 'ready';
+
+      document.getElementById('menu-overlay').style.display = 'none';
+      document.getElementById('game-area').style.display = 'flex';
 
       setupInput();
       resetGameLogicOnline(config);
@@ -2482,6 +2509,9 @@
             });
           }
         } 
+        else if (data.type === 'start_countdown') {
+          startCountdown();
+        }
         else if (data.type === 'garbage_request' && isHostMode) {
           for (const [tId, count] of Object.entries(data.targets)) {
             if (tId === 'host') {
@@ -2505,7 +2535,7 @@
         }
         else if (data.type === 'rematch_req') {
           if (isHostMode) {
-            // ホストは受け取ったら再戦ボタンの同期などに使うが、今回は特に何もしない
+            // ホスト側は受け取って何もしない(ホスト自身のリザルトUI操作が主導)
           }
         }
         else if (data.type === 'leave') {
@@ -2594,11 +2624,22 @@
         gameContainer.style.transform = '';
         gameContainer.style.width = '100%';
         gameContainer.style.height = '100%';
-        // 利き手によって全体のレイアウト（ボタン群・自分・相手の配置）を左右反転させる
-        gameContainer.style.flexDirection = isLeft ? 'row-reverse' : 'row';
+        
+        // 利き手に応じて配置順序を切り替え (isLeft? 左: controls, 右: rivalsArea / isLeft=false? 左: rivalsArea, 右: controls)
+        gameContainer.style.flexDirection = 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.padding = '10px';
+        
+        if (isLeft) {
+          controls.style.order = 1;
+          myWrapper.style.order = 2;
+          rivalsArea.style.order = 3;
+        } else {
+          rivalsArea.style.order = 1;
+          myWrapper.style.order = 2;
+          controls.style.order = 3;
+        }
 
         const totalBoards = 1 + oppCount;
         const availableW = W - 140;
@@ -2640,11 +2681,15 @@
         gameContainer.style.transform = '';
         gameContainer.style.width = '100%';
         gameContainer.style.height = '100%';
-        gameContainer.style.flexDirection = isLeft ? 'row-reverse' : 'row';
+        // 利き手に応じてフレックスボックス全体を反転
+        gameContainer.style.flexDirection = isLeft ? 'row' : 'row-reverse';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.paddingBottom = '0px'; 
         gameContainer.style.paddingTop = '0px';
+
+        controls.style.order = '';
+        myWrapper.style.order = '';
 
         if (oppCount === 1) {
           const rivalWrapper = document.getElementById('rival-wrapper-0');
@@ -2752,9 +2797,12 @@
         controls.style.height = 'auto';
         controls.style.justifyContent = 'center';
         controls.style.width = '110px';
+        controls.style.order = '';
+        myWrapper.style.order = '';
         if (handednessWrapper) handednessWrapper.style.marginTop = '0';
 
-        gameContainer.style.flexDirection = isLeft ? 'row-reverse' : 'row';
+        // 利き手に応じてフレックスボックス全体を反転
+        gameContainer.style.flexDirection = isLeft ? 'row' : 'row-reverse';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.position = 'absolute';
