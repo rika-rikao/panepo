@@ -37,83 +37,42 @@
     .btn:disabled { background: #555; border-color: #777; cursor: not-allowed; transform: none; }
     .input-box { padding: 10px; border-radius: 20px; border: 2px solid #4ecca3; background: #162447; color: #fff; text-align: center; width: 240px; outline: none; }
     
-/* ===================================================
-   設定画面モーダル（あなたのコードを正常動作させた版）
-   =================================================== */
+    /* ===================================================
+       設定画面モーダル (修正版レイアウト)
+       =================================================== */
+    #settings-overlay {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100dvh; 
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 300;
+      display: none; /* JSで display: block; に切り替える */
+      box-sizing: border-box;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      /* 上下に適度な余白を持たせ、要素が長い時はスクロールできるようにする */
+      padding: max(20px, env(safe-area-inset-top)) 20px 40px 20px;
+    }
 
-/* オーバーレイ（暗幕＆スクロールコンテナ） */
-#settings-overlay {
-  position: fixed;
-  /* ★修正1: bottom: 0 を外し、100svh でアドレスバーの上にピタッと止める */
-  top: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  height: 100svh; 
+    .settings-box {
+      box-sizing: border-box;
+      background: #162447;
+      border-radius: 14px;
+      border: 2px solid #4ecca3;
+      width: 100%;
+      max-width: 450px;
+      margin: 0 auto; /* 親が block のため、左右中央寄せしつつ上からはpaddingの隙間で配置 */
+      padding: 18px;
+      gap: 12px;
+      line-height: 1.35;
+      display: flex;
+      flex-direction: column;
+    }
 
-  background: rgba(0, 0, 0, 0.9);
-  z-index: 300;
-  display: none; /* 表示切替時は JS で 'flex' にする */
-  flex-direction: column;
-  align-items: center;
-  box-sizing: border-box;
-
-  /* Safariで背面スクロールに吸い取られるのを防ぐ */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-
-  /* 
-   * 上下パディング：
-   * 100svhで下端はアドレスバーの上に届いているため、
-   * 上下に最低限のクッション余白（16px）を空けるだけでOK
-   */
-  padding: max(16px, env(safe-area-inset-top)) 16px 16px 16px;
-}
-
-/* 設定ウィンドウ本体 */
-.settings-box {
-  box-sizing: border-box;
-  background: #162447;
-  border-radius: 14px;
-  border: 2px solid #4ecca3;
-  width: 100%;
-  max-width: 450px;
-
-  /* 
-   * ★修正2: 
-   * margin: auto だけだと「中身が多い時に上が消えて戻れなくなる」ため、
-   * auto の代わりに margin: auto 0; にしつつ、親に中央寄せを任せる
-   */
-  margin: auto 0; 
-  flex-shrink: 0; /* WebKitで潰れるのを防止 */
-
-  padding: 18px;
-  gap: 12px;
-  line-height: 1.35;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 中身の要素の不要な余白リセット */
-.settings-box h2,
-.settings-box h3,
-.settings-box p {
-  margin: 0;
-}
-
-/* 一番下の保存ボタン */
-.settings-box button.btn {
-  flex-shrink: 0;
-  min-height: 44px;
-}
-
-/* PC画面など高さに十分余裕がある場合は下マージンを通常の中央寄せに戻す */
-@media (min-height: 700px) and (min-width: 600px) {
-  .settings-box {
-    margin: auto;
-  }
-}
+    .settings-box h2, .settings-box h3, .settings-box p { margin: 0; }
+    .settings-box button.btn { flex-shrink: 0; min-height: 44px; }
 
     .settings-section { border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px; flex-shrink: 0; }
     .config-btn { background: #0f3460; border: 1px solid #4ecca3; color: white; border-radius: 5px; padding: 6px; cursor: pointer; font-size: 0.85rem; width: 110px; text-align: center; }
@@ -173,6 +132,11 @@
 </head>
 <body>
   <div id="toast"></div>
+
+  <!-- Ready / Go!! 表示用オーバーレイ -->
+  <div id="ready-go-overlay" style="display:none; position:absolute; inset:0; z-index:500; pointer-events:none; flex-direction:column; align-items:center; justify-content:center;">
+    <div id="ready-go-text" style="font-size: 5rem; font-weight: 900; color: #ff007f; text-shadow: 0 0 15px rgba(255,255,255,0.8), 0 0 30px #e94560; opacity: 0; transform: scale(0.5); font-style: italic;"></div>
+  </div>
 
   <!-- 設定画面 -->
   <div id="settings-overlay">
@@ -417,26 +381,40 @@
       }
     });
 
-    function playMainBgm() {
-      if (bgmPlaylist.length > 0) {
-        bgmAudio.loop = false;
-        if (!isBgmPlaying) {
-          bgmAudio.play().then(() => { isBgmPlaying = true; bgmNeedsPlay = false; }).catch(e=>console.warn(e));
-        }
-      } else {
-        bgmAudio.loop = true;
-        if (!bgmAudio.src.includes('main00.m4a')) {
-          bgmAudio.src = 'assets/bgm/main00.m4a';
-        }
-        bgmAudio.play().then(() => { isBgmPlaying = true; }).catch(e=>console.warn(e));
-      }
-    }
-
     function stopBgm() {
-      if (isBgmPlaying) {
+      if (isBgmPlaying || !bgmAudio.paused) {
         bgmAudio.pause();
         isBgmPlaying = false;
       }
+    }
+
+    // ゲーム開始時等にBGMを強制的に先頭から一時停止状態でセットアップする
+    function readyBgm() {
+      stopBgm();
+      if (bgmPlaylist.length > 0) {
+        bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
+        bgmAudio.loop = false;
+      } else {
+        bgmAudio.src = 'assets/bgm/main00.m4a';
+        bgmAudio.loop = true;
+      }
+      bgmAudio.currentTime = 0;
+      
+      // 一瞬再生させてすぐ止めることで、後続のタイマー内での自動再生を許可させる
+      bgmAudio.play().then(() => { 
+        bgmAudio.pause(); 
+        isBgmPlaying = false; 
+      }).catch(e => console.warn(e));
+      
+      isPanic = false;
+      mainBgmTime = 0;
+    }
+
+    // Go!! と同時に呼び出されるBGM再開処理
+    function resumeBgm() {
+      bgmAudio.play().then(() => {
+        isBgmPlaying = true;
+      }).catch(e => console.warn(e));
     }
 
     // --- コンフィグ管理 ---
@@ -452,7 +430,7 @@
     let assigningAction = null, assignType = null;
 
     function openSettings() { 
-      document.getElementById('settings-overlay').style.display = 'flex'; 
+      document.getElementById('settings-overlay').style.display = 'block'; 
       renderConfigUI();
     }
     function closeSettings() { 
@@ -461,7 +439,7 @@
       localStorage.setItem('pdw_key', JSON.stringify(keyConfig));
       localStorage.setItem('pdw_pad', JSON.stringify(padConfig));
 
-      if (bgmNeedsPlay && !isBgmPlaying) {
+      if (bgmNeedsPlay && !isBgmPlaying && matchState !== 'playing') {
         bgmAudio.loop = false;
         bgmAudio.play().then(() => { isBgmPlaying = true; bgmNeedsPlay = false; }).catch(e => console.warn(e));
       }
@@ -560,11 +538,13 @@
       getRandomBlock(c, r, avoidMatch = true) {
         let validConfigs = [...COLORS];
         if (avoidMatch) {
-          if (c >= 2 && this.grid[r] && this.grid[r][c-1] && this.grid[r][c-2] && this.grid[r][c-1].type === this.grid[r][c-2].type) {
+          // 横に3個以上連結しないようにする
+          if (c >= 2 && this.grid[r][c-1] && this.grid[r][c-2] && this.grid[r][c-1].type === this.grid[r][c-2].type) {
             validConfigs = validConfigs.filter(conf => conf.id !== this.grid[r][c-1].type);
           }
-          if (r <= this.rows - 3 && this.grid[r+1] && this.grid[r+2] && this.grid[r+1][c] && this.grid[r+2][c] && this.grid[r+1][c].type === this.grid[r+2][c].type) {
-            validConfigs = validConfigs.filter(conf => conf.id !== this.grid[r+1][c].type);
+          // 縦に3個以上連結しないようにする (上から下へ生成しているため r-1, r-2 を確認)
+          if (r >= 2 && this.grid[r-1][c] && this.grid[r-2][c] && this.grid[r-1][c].type === this.grid[r-2][c].type) {
+            validConfigs = validConfigs.filter(conf => conf.id !== this.grid[r-1][c].type);
           }
         }
         return { type: this.pickWeightedColor(validConfigs), state: 'normal', timer: 0, fallY: 0, chainEligible: false };
@@ -583,7 +563,7 @@
       }
 
       swap(c, r) {
-        if (this.gameOver || isMatchOver) return false;
+        if (this.gameOver || isMatchOver || matchState !== 'playing') return false;
         if (c < 0 || c >= this.cols - 1 || r < 0 || r >= this.rows) return false;
         const b1 = this.grid[r][c], b2 = this.grid[r][c + 1];
         
@@ -608,7 +588,7 @@
       }
 
       manualRiseStep() {
-        if (this.gameOver || isMatchOver) return;
+        if (this.gameOver || isMatchOver || matchState !== 'playing') return;
         this.stopTimer = 0; 
         this.riseOffset += 0.035; 
         if (this.riseOffset >= 1.0) this.pushNewRow();
@@ -725,7 +705,7 @@
       }
 
       update() {
-        if (this.gameOver || isMatchOver) return;
+        if (this.gameOver || isMatchOver || matchState !== 'playing') return;
 
         let needsMatchCheck = false;
         let isMoving = false;
@@ -1162,8 +1142,21 @@
                 if (!sameRight) { ctx.moveTo(x+CELL_PX-1, y); ctx.lineTo(x+CELL_PX-1, y+CELL_PX); }
                 ctx.stroke();
 
-                ctx.fillStyle = 'rgba(255,255,255,0.08)';
-                ctx.beginPath(); ctx.arc(x+CELL_PX/2, y+CELL_PX/2, CELL_PX/4, 0, Math.PI*2); ctx.fill();
+                if (b.isHard) {
+                  // 硬いお邪魔は「✕」を描画
+                  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+                  ctx.lineWidth = 4;
+                  ctx.beginPath();
+                  ctx.moveTo(x + CELL_PX * 0.25, y + CELL_PX * 0.25);
+                  ctx.lineTo(x + CELL_PX * 0.75, y + CELL_PX * 0.75);
+                  ctx.moveTo(x + CELL_PX * 0.75, y + CELL_PX * 0.25);
+                  ctx.lineTo(x + CELL_PX * 0.25, y + CELL_PX * 0.75);
+                  ctx.stroke();
+                } else {
+                  // 普通のお邪魔は「◯」
+                  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+                  ctx.beginPath(); ctx.arc(x+CELL_PX/2, y+CELL_PX/2, CELL_PX/4, 0, Math.PI*2); ctx.fill();
+                }
               } else {
                 const conf = COLORS.find(item => item.id === b.type);
                 if (conf) {
@@ -1224,7 +1217,7 @@
         this.engine.riseSpeed = 0.0010 + (level * 0.0002); 
       }
       update() {
-        if (this.engine.gameOver || isMatchOver) return;
+        if (this.engine.gameOver || isMatchOver || matchState !== 'playing') return;
         
         let maxH = 0;
         for (let c=0; c<COLS; c++) { 
@@ -1251,7 +1244,7 @@
         }
       }
       think() {
-        if (this.engine.gameOver || isMatchOver) return;
+        if (this.engine.gameOver || isMatchOver || matchState !== 'playing') return;
         this.actionTimer = this.thinkInterval;
         this.engine.isRisingManualPad = false;
 
@@ -1275,9 +1268,38 @@
         } else {
           if (this.level >= 3 && maxH <= 5 && this.engine.garbageQueue.length === 0) {
             this.engine.isRisingManualPad = true;
+            this.target = null;
           } else { 
             this.engine.isRisingManualPad = false;
-            this.target = { x: Math.floor(Math.random()*(COLS-1)), y: Math.floor(Math.random()*(ROWS-2))+2 }; 
+            
+            // 無駄な探索を減らす：通常ブロックが含まれる周辺の有効なスワップ場所を探す
+            let meaningfulTargets = [];
+            for (let r = ROWS - 1; r >= 0; r--) {
+              let hasNormal = false;
+              for (let c = 0; c < COLS; c++) {
+                const b = this.engine.grid[r][c];
+                if (b && b.state === 'normal' && b.type !== 'garbage') {
+                  hasNormal = true; break;
+                }
+              }
+              if (hasNormal) {
+                for (let c = 0; c < COLS - 1; c++) {
+                  const b1 = this.engine.grid[r][c];
+                  const b2 = this.engine.grid[r][c+1];
+                  if (!b1 && !b2) continue; // 両方空は無視
+                  if (b1 && b1.type === 'garbage' && b2 && b2.type === 'garbage') continue; // 両方お邪魔は無視
+                  if (b1 && b1.type === 'garbage' && !b2) continue; // お邪魔と空も無視
+                  if (!b1 && b2 && b2.type === 'garbage') continue; 
+                  meaningfulTargets.push({x: c, y: r});
+                }
+              }
+            }
+            
+            if (meaningfulTargets.length > 0) {
+              this.target = meaningfulTargets[Math.floor(Math.random() * meaningfulTargets.length)];
+            } else {
+              this.target = { x: Math.floor(Math.random()*(COLS-1)), y: Math.floor(Math.random()*(ROWS-2))+2 }; 
+            }
             this.moveTimer = this.moveInterval; 
           }
         }
@@ -1305,7 +1327,7 @@
     }
 
     // ==========================================
-    // 対戦・ターゲット管理システム
+    // 対戦・ターゲット・ゲーム管理システム
     // ==========================================
     let myEngine, myRenderer;
     let opponents = [];
@@ -1315,6 +1337,8 @@
     let rematchReady = { me: false };
     let isMatchOver = false;
     let loopId = null, syncIntervalId = null;
+    let matchState = 'ready'; // 'ready', 'playing', 'gameover'
+    let isPanic = false, mainBgmTime = 0;
 
     function showToast(msg) { 
       const t = document.getElementById('toast'); 
@@ -1439,13 +1463,17 @@
       if (currentMode === 'single' || currentMode === 'com') {
         resetGameLogic();
         document.getElementById('result-overlay').style.display = 'none';
-        playMainBgm();
+        matchState = 'ready';
+        readyBgm();
+        showReadyGo();
       } else if (currentMode.startsWith('online')) {
         rematchReady.me = true;
         onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'rematch_req' }); });
         resetGameLogic();
         document.getElementById('result-overlay').style.display = 'none';
-        playMainBgm();
+        matchState = 'ready';
+        readyBgm();
+        showReadyGo();
       }
     }
 
@@ -1457,6 +1485,7 @@
 
       if (myEngine && myEngine.gameOver) {
         isMatchOver = true;
+        matchState = 'gameover';
         stopAllEngines();
         showResultModal("LOSE...");
         return;
@@ -1465,6 +1494,7 @@
       const aliveOpponents = opponents.filter(o => !o.engine.gameOver);
       if (opponents.length > 0 && aliveOpponents.length === 0) {
         isMatchOver = true;
+        matchState = 'gameover';
         stopAllEngines();
         showResultModal("WIN!!");
       }
@@ -1491,18 +1521,122 @@
       });
     }
 
+    // ==========================================
+    // Ready -> Go!! アニメーション制御
+    // ==========================================
+    function showReadyGo() {
+      const overlay = document.getElementById('ready-go-overlay');
+      const text = document.getElementById('ready-go-text');
+      overlay.style.display = 'flex';
+      
+      text.innerText = 'READY?';
+      text.style.transition = 'none';
+      text.style.opacity = '0';
+      text.style.transform = 'scale(0.5)';
+      text.style.color = '#ff007f';
+      
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          text.style.transition = 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+          text.style.opacity = '1';
+          text.style.transform = 'scale(1)';
+        });
+      });
+
+      setTimeout(() => {
+        text.style.transition = 'none';
+        text.style.opacity = '0';
+        text.style.transform = 'scale(1.5)';
+        text.innerText = 'GO!!';
+        text.style.color = '#00e676';
+        
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            text.style.transition = 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+            text.style.opacity = '1';
+            text.style.transform = 'scale(1)';
+          });
+        });
+
+        matchState = 'playing';
+        resumeBgm();
+
+        setTimeout(() => {
+          text.style.transition = 'all 0.3s ease-in';
+          text.style.opacity = '0';
+          text.style.transform = 'scale(2)';
+          setTimeout(() => {
+            overlay.style.display = 'none';
+          }, 300);
+        }, 800);
+
+      }, 1500); // 1.5秒待ってからGo!!
+    }
+
+    // ==========================================
+    // ピンチ状態 (BGM切り替え) 判定
+    // ==========================================
+    function checkPanic() {
+      if (!myEngine || matchState !== 'playing' || isMatchOver) return;
+      
+      let panic = false;
+      // ROWS=12 の 75% は上から3段目（index 0, 1, 2）。いずれかにブロックがあればピンチ。
+      for (let r = 0; r <= 2; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (myEngine.grid[r][c] !== null) {
+            panic = true; break;
+          }
+        }
+        if (panic) break;
+      }
+      
+      if (panic && !isPanic) {
+        isPanic = true;
+        switchBgmToPanic(true);
+      } else if (!panic && isPanic) {
+        isPanic = false;
+        switchBgmToPanic(false);
+      }
+    }
+
+    function switchBgmToPanic(toPanic) {
+      const wasPlaying = !bgmAudio.paused;
+      
+      if (toPanic) {
+        if (bgmAudio.src.includes('main00') || bgmPlaylist.length > 0) {
+          mainBgmTime = bgmAudio.currentTime;
+        }
+        bgmAudio.src = 'assets/bgm/panic00.m4a';
+        bgmAudio.loop = true;
+        if (wasPlaying || matchState === 'playing') bgmAudio.play().catch(()=>{});
+      } else {
+        if (bgmPlaylist.length > 0) {
+          bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
+          bgmAudio.loop = false;
+        } else {
+          bgmAudio.src = 'assets/bgm/main00.m4a';
+          bgmAudio.loop = true;
+        }
+        bgmAudio.currentTime = mainBgmTime; // 通常時に戻った場合は位置を復元
+        if (wasPlaying || matchState === 'playing') bgmAudio.play().catch(()=>{});
+      }
+    }
+
     // --- ゲーム開始初期化 ---
     function startGame(mode, level = 1, totalPlayers = 2) {
       currentMode = mode;
       currentComLevel = level;
       currentTotalPlayers = totalPlayers;
+      matchState = 'ready';
       
       document.getElementById('menu-overlay').style.display = 'none';
       document.getElementById('game-area').style.display = 'flex';
       
       setupInput();
       resetGameLogic();
-      playMainBgm();
+      
+      readyBgm();
+      showReadyGo();
       
       if (loopId) cancelAnimationFrame(loopId);
       lastTime = performance.now();
@@ -1623,6 +1757,7 @@
       }
       
       isMatchOver = true;
+      matchState = 'gameover';
       stopAllEngines();
       stopBgm();
       
@@ -1657,6 +1792,7 @@
       if (!myEngine || myEngine.gameOver || isMatchOver) return;
 
       let moved = false;
+      // カーソル移動は ready 中も可能
       if (padConfig.Up !== null && justPressed(padConfig.Up) && myEngine.cursor.y > 0) { myEngine.cursor.y--; moved = true; }
       if (padConfig.Down !== null && justPressed(padConfig.Down) && myEngine.cursor.y < ROWS - 1) { myEngine.cursor.y++; moved = true; }
       if (padConfig.Left !== null && justPressed(padConfig.Left) && myEngine.cursor.x > 0) { myEngine.cursor.x--; moved = true; }
@@ -1706,6 +1842,7 @@
             if (opp.ai) opp.ai.update();
             if (opp.engine) opp.engine.update();
           });
+          checkPanic(); // パニック時のBGM切り替えチェック
         }
         accumulator -= FIXED_TIME_STEP;
       }
@@ -1759,7 +1896,7 @@
               SE.play('cursorMove');
               grabbedCol++;
               if (!continuous) { isDown = false; break; }
-           } else break;
+           } else break; // swapが弾かれたら止まる（Ready中なども）
         }
         while (targetCol < grabbedCol) {
            myEngine.cursor.x = grabbedCol - 1; myEngine.cursor.y = grabbedRow;
@@ -1814,6 +1951,7 @@
         const code = e.code;
         let moved = false;
         
+        // カーソル移動
         if (code === keyConfig.Up) { e.preventDefault(); if (myEngine.cursor.y > 0) { myEngine.cursor.y--; moved = true; } }
         if (code === keyConfig.Down) { e.preventDefault(); if (myEngine.cursor.y < ROWS - 1) { myEngine.cursor.y++; moved = true; } }
         if (code === keyConfig.Left) { e.preventDefault(); if (myEngine.cursor.x > 0) { myEngine.cursor.x--; moved = true; } }
@@ -1919,7 +2057,7 @@
     }
 
     // ==========================================
-    // 自動リサイズ・対戦人数別レイアウト (完全修正版)
+    // 自動リサイズ・対戦人数別レイアウト
     // ==========================================
     function adjustLayout() {
       const isPortrait = window.innerHeight > window.innerWidth;
