@@ -37,19 +37,18 @@
     .btn:disabled { background: #555; border-color: #777; cursor: not-allowed; transform: none; }
     .input-box { padding: 10px; border-radius: 20px; border: 2px solid #4ecca3; background: #162447; color: #fff; text-align: center; width: 240px; outline: none; }
     
-    /* 設定画面 */
+    /* 設定画面 (スクロール対応・iOS18.4対応) */
     #settings-overlay {
-      position: absolute; inset: 0; background: rgba(0, 0, 0, 0.9); z-index: 300;
-      display: none; flex-direction: column; align-items: center; justify-content: center;
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); z-index: 300;
+      display: none; flex-direction: column; align-items: center; justify-content: flex-start;
+      padding: 40px 15px; overflow-y: auto; -webkit-overflow-scrolling: touch;
     }
     .settings-box {
       background: #162447; padding: 20px; border-radius: 15px; border: 2px solid #4ecca3;
-      width: 90%; max-width: 450px; max-height: 85vh; /* iOS対応のため余裕を持たせる */
-      overflow-y: auto; display: block; /* Flexboxによるレイアウト崩れ防止 */
+      width: 100%; max-width: 450px; flex-shrink: 0; margin: auto;
+      display: flex; flex-direction: column; gap: 15px;
     }
-    .settings-box > * { margin-bottom: 15px; }
-    .settings-box > *:last-child { margin-bottom: 0; }
-
+    
     .settings-section { border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px; }
     .config-btn { background: #0f3460; border: 1px solid #4ecca3; color: white; border-radius: 5px; padding: 6px; cursor: pointer; font-size: 0.85rem; width: 110px; text-align: center; }
     .config-btn:active { background: #e94560; }
@@ -112,7 +111,7 @@
   <!-- 設定画面 -->
   <div id="settings-overlay">
     <div class="settings-box">
-      <h2 style="text-align: center; color: #4ecca3;">設定</h2>
+      <h2 style="text-align: center; color: #4ecca3; margin-bottom: 5px;">設定</h2>
       
       <div class="settings-section">
         <h3>🎵 音声設定</h3>
@@ -304,6 +303,7 @@
     let bgmAudio = new Audio();
     bgmAudio.loop = false;
     let bgmPlaylist = [], currentBgmIndex = 0, isBgmPlaying = false, bgmNeedsPlay = false;
+    let isMyBgmSet = false; // マイBGMが設定されているかのフラグ
 
     const savedSeVol = localStorage.getItem('pdw_se_vol');
     if (savedSeVol !== null) SE.volume = parseFloat(savedSeVol);
@@ -333,6 +333,7 @@
         currentBgmIndex = 0;
         bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
         bgmNeedsPlay = true;
+        isMyBgmSet = true;
         showToast('BGMをセットしました。「設定を保存して閉じる」を押すと再生されます');
       }
     }
@@ -340,20 +341,44 @@
     document.getElementById('bgm-dir-input').addEventListener('change', e => handleBgmFiles(e.target.files));
 
     function toggleBgmPlay() {
-      if (bgmPlaylist.length === 0) { showToast('先にBGMファイルを選択してください'); return; }
+      if (!isMyBgmSet && bgmPlaylist.length === 0) { showToast('先にBGMファイルを選択してください'); return; }
       if (isBgmPlaying) {
         bgmAudio.pause(); isBgmPlaying = false;
       } else {
         bgmAudio.play().then(() => { isBgmPlaying = true; bgmNeedsPlay = false; }).catch(() => showToast('再生エラー'));
       }
     }
+    
     bgmAudio.addEventListener('ended', () => {
-      currentBgmIndex = (currentBgmIndex + 1) % bgmPlaylist.length;
-      if (bgmPlaylist.length > 0) {
+      if (isMyBgmSet && bgmPlaylist.length > 0) {
+        currentBgmIndex = (currentBgmIndex + 1) % bgmPlaylist.length;
         bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
         bgmAudio.play().catch(()=>{});
       }
     });
+
+    // ゲーム用BGM制御
+    // 緊迫(ゲームオーバーになりそう)BGMを追加する場合はここで分岐やフェード等を追加可能
+    function startPuzzleBgm() {
+      if (isMyBgmSet) {
+        if (!isBgmPlaying) {
+          bgmAudio.loop = false;
+          bgmAudio.play().then(() => { isBgmPlaying = true; }).catch(()=>{});
+        }
+      } else {
+        bgmAudio.src = 'assets/bgm/main00.m4a';
+        bgmAudio.loop = true;
+        bgmAudio.play().then(() => { isBgmPlaying = true; }).catch(()=>{});
+      }
+    }
+
+    function stopPuzzleBgm() {
+      if (!isMyBgmSet && isBgmPlaying) {
+        bgmAudio.pause();
+        bgmAudio.currentTime = 0;
+        isBgmPlaying = false;
+      }
+    }
 
     // --- コンフィグ管理 ---
     let keyConfig = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Swap: 'Space', Rise: 'ShiftLeft', Target: 'KeyE' };
@@ -378,6 +403,7 @@
       localStorage.setItem('pdw_pad', JSON.stringify(padConfig));
 
       if (bgmNeedsPlay && !isBgmPlaying) {
+        bgmAudio.loop = false; // マイBGMなのでループさせずプレイリスト進行
         bgmAudio.play().then(() => { isBgmPlaying = true; bgmNeedsPlay = false; }).catch(e => console.log(e));
       }
     }
@@ -432,7 +458,6 @@
         this.nextRow = []; 
         this.riseOffset = 0; 
         
-        // 激ムズ(不利:1)だったスピードを基準(普通:3)に引き上げ、難易度に応じて調整
         this.riseSpeed = 0.0012 - (handicap - 3) * 0.0003;
         if (this.riseSpeed < 0.0003) this.riseSpeed = 0.0003;
 
@@ -505,8 +530,8 @@
         
         const isFloating = (b, c_idx) => b && r < this.rows - 1 && this.grid[r+1][c_idx] === null;
 
-        if (b1 && (b1.state !== 'normal' && b1.state !== 'transforming_wait')) return false;
-        if (b2 && (b2.state !== 'normal' && b2.state !== 'transforming_wait')) return false;
+        if (b1 && b1.state !== 'normal') return false;
+        if (b2 && b2.state !== 'normal') return false;
         if (b1 && b1.type === 'garbage') return false;
         if (b2 && b2.type === 'garbage') return false;
         if (isFloating(b1, c) || isFloating(b2, c + 1)) return false;
@@ -532,7 +557,6 @@
 
       pushNewRow() {
         this.riseOffset = 0;
-        // 即死判定を削除し、update内のdangerTimerで制御
         for (let r = 0; r < this.rows - 1; r++) this.grid[r] = this.grid[r + 1];
         this.grid[this.rows - 1] = this.nextRow;
         this.nextRow = this.createNextRow();
@@ -625,7 +649,7 @@
 
             targetCells.forEach((item, idx) => {
               item.b.state = 'transforming';
-              item.b.transformDelay = idx * 6; // 6フレームごとに変換
+              item.b.transformDelay = idx * 6; // 6フレームごとに順次変換
               item.b.transformToNormal = !isHardGroup;
             });
 
@@ -648,25 +672,22 @@
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
             const b = this.grid[r][c];
-            if (b && b.type === 'garbage' && b.state === 'transforming') {
+            if (b && (b.type === 'garbage' || b.groupId) && b.state === 'transforming') {
               isMoving = true;
               if (b.transformDelay > 0) b.transformDelay--;
               if (b.transformDelay <= 0) {
                 if (b.transformToNormal) {
                   const validConfigs = COLORS.filter(col => !col.isSpecial);
                   b.type = validConfigs[Math.floor(Math.random() * validConfigs.length)].id;
-                  b.state = 'hover';
-                  b.timer = 15;
+                  b.state = 'transform_done';
                   b.chainEligible = true;
-                  delete b.groupId;
-                  delete b.isHard;
                 } else {
                   b.isHard = false;
-                  b.state = 'normal';
+                  b.state = 'transform_done';
                 }
-                SE.play('garbageErase');
+                SE.play('garbageErase'); // 音を鳴らしてアニメーション効果を持たせる
               }
-            } else if (b && b.type === 'garbage' && b.state === 'transforming_wait') {
+            } else if (b && (b.type === 'garbage' || b.groupId) && b.state === 'transforming_wait') {
               isMoving = true;
             }
           }
@@ -715,7 +736,7 @@
           this.dangerTimer = 180;
         }
 
-        // せり上がり処理（詰まっている時は上がらない）
+        // せり上がり処理
         if (!isTopFilled && !garbageBlocked) {
           if (this.isRisingManualBtn || this.isRisingManualKey || this.isRisingManualPad) {
             this.manualRiseStep();
@@ -728,7 +749,7 @@
           }
         }
 
-        // マッチングと落下の処理
+        // マッチング消去処理
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
             const b = this.grid[r][c];
@@ -754,11 +775,12 @@
           }
         }
 
+        // お邪魔ブロック/アニメーション中ブロックのグループ管理と落下
         const garbageGroups = new Map();
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
             const b = this.grid[r][c];
-            if (b && b.type === 'garbage' && b.groupId) {
+            if (b && b.groupId) {
               if (!garbageGroups.has(b.groupId)) garbageGroups.set(b.groupId, []);
               garbageGroups.get(b.groupId).push({ r, c, block: b });
             }
@@ -766,19 +788,37 @@
         }
 
         garbageGroups.forEach((cells, groupId) => {
-          const hasTransforming = cells.some(item => item.block.state === 'transforming');
-          if (!hasTransforming) {
-            cells.forEach(item => {
-              if (item.block.state === 'transforming_wait') {
-                item.block.state = 'hover';
-                item.block.timer = 10;
-              }
-            });
+          let hasTransforming = false;
+          let hasTransformDone = false;
+          for (let item of cells) {
+            if (item.block.state === 'transforming' || item.block.state === 'transforming_wait') hasTransforming = true;
+            if (item.block.state === 'transform_done') hasTransformDone = true;
           }
 
-          const leader = cells[0].block;
-          if (leader.state === 'transforming' || leader.state === 'transforming_wait') return;
+          if (hasTransformDone && !hasTransforming) {
+            // グループ全体のアニメーション完了。一斉に hover (落下判定) に移行
+            cells.forEach(item => {
+              if (item.block.state === 'transform_done') {
+                item.block.state = 'hover';
+                item.block.timer = 15;
+                if (item.block.type !== 'garbage') {
+                  // 通常ブロック化されたものは groupId を剥奪し、翌フレームから通常ブロックとして扱う
+                  delete item.block.groupId;
+                  delete item.block.isHard;
+                }
+              }
+            });
+            return;
+          }
 
+          if (hasTransforming || hasTransformDone) {
+            // アニメーション中なので、まだ落下させずに空中に留める
+            isMoving = true;
+            return;
+          }
+
+          // 通常のお邪魔ブロック落下・ホバー処理
+          const leader = cells[0].block;
           if (leader.state === 'hover') {
             isMoving = true;
             leader.timer--;
@@ -849,11 +889,11 @@
           }
         });
 
-        // 通常ブロックのスタック落下処理
+        // 通常ブロックのスタック落下処理 (groupIdを持つ変換中ブロック等は除外)
         for (let c = 0; c < this.cols; c++) {
           let r = this.rows - 1;
           while (r >= 0) {
-            while (r >= 0 && (this.grid[r][c] === null || this.grid[r][c].type === 'garbage' || this.grid[r][c].state === 'match')) {
+            while (r >= 0 && (this.grid[r][c] === null || this.grid[r][c].type === 'garbage' || this.grid[r][c].state === 'match' || this.grid[r][c].groupId)) {
               r--;
             }
             if (r < 0) break;
@@ -867,7 +907,7 @@
             if (canFallOrFloating || this.grid[r][c].state === 'hover' || this.grid[r][c].state === 'fall') {
               let stack = [];
               let cur = r;
-              while (cur >= 0 && this.grid[cur][c] && this.grid[cur][c].type !== 'garbage' && this.grid[cur][c].state !== 'match') {
+              while (cur >= 0 && this.grid[cur][c] && this.grid[cur][c].type !== 'garbage' && this.grid[cur][c].state !== 'match' && !this.grid[cur][c].groupId) {
                 stack.push({ r: cur, block: this.grid[cur][c] });
                 cur--;
               }
@@ -1000,7 +1040,7 @@
           for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
               const b = this.grid[r][c];
-              if (b && (b.state === 'match' || b.state === 'fall' || b.state === 'hover' || b.state === 'transforming' || b.state === 'transforming_wait')) isMoving = true;
+              if (b && (b.state === 'match' || b.state === 'fall' || b.state === 'hover' || b.state === 'transforming' || b.state === 'transforming_wait' || b.state === 'transform_done')) isMoving = true;
             }
           }
           if (!isMoving) {
@@ -1109,7 +1149,6 @@
         this.moveInterval = [15, 10, 5, 2][level - 1];   
         this.actionTimer = this.thinkInterval;
         this.moveTimer = 0;
-        // プレイヤーのスピード変更に合わせる
         this.engine.riseSpeed = 0.0010 + (level * 0.0002); 
       }
       update() {
@@ -1326,11 +1365,13 @@
     function requestRematch() {
       if (currentMode === 'single' || currentMode === 'com') {
         resetGameLogic();
+        startPuzzleBgm();
         document.getElementById('result-overlay').style.display = 'none';
       } else if (currentMode.startsWith('online')) {
         rematchReady.me = true;
         onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'rematch_req' }); });
         resetGameLogic();
+        startPuzzleBgm();
         document.getElementById('result-overlay').style.display = 'none';
       }
     }
@@ -1344,6 +1385,7 @@
       if (myEngine && myEngine.gameOver) {
         isMatchOver = true;
         stopAllEngines();
+        stopPuzzleBgm();
         showResultModal("LOSE...");
         return;
       }
@@ -1352,6 +1394,7 @@
       if (opponents.length > 0 && aliveOpponents.length === 0) {
         isMatchOver = true;
         stopAllEngines();
+        stopPuzzleBgm();
         showResultModal("WIN!!");
       }
     }
@@ -1388,6 +1431,7 @@
       
       setupInput();
       resetGameLogic();
+      startPuzzleBgm();
       
       if (loopId) cancelAnimationFrame(loopId);
       lastTime = performance.now();
@@ -1502,7 +1546,6 @@
     }
 
     function exitGame() {
-      // isMatchOver(勝敗モーダル時)はアラートを出さない
       if (myEngine && !myEngine.gameOver && currentMode !== 'single' && !isMatchOver) {
         if (!confirm("退出してメニューに戻りますか？\n（対戦時は負けになります）")) return;
         onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'leave' }); });
@@ -1510,6 +1553,7 @@
       
       isMatchOver = true;
       stopAllEngines();
+      stopPuzzleBgm(); // 退出時にBGMストップ
       myEngine = null; opponents = [];
       onlineConnections.forEach(c => c.close());
       onlineConnections = [];
