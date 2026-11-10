@@ -38,67 +38,49 @@
     .input-box { padding: 10px; border-radius: 20px; border: 2px solid #4ecca3; background: #162447; color: #fff; text-align: center; width: 240px; outline: none; }
     
     /* 設定画面 */
-/* ===================================================
-   設定画面モーダル
-   ・PC：余白を締めてスクロールバー不要で全表示
-   ・スマホ：高さが足りない場合のみ自動で縦スクロール
-   ・iOS Safariのセーフエリア＆枠外はみ出し防止
-   =================================================== */
-
-/* オーバーレイ（暗幕背景） */
+/* オーバーレイ（親）をスクロール可能にする */
 #settings-overlay {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100dvh; /* 動的ツールバー対応 */
   background: rgba(0, 0, 0, 0.9);
   z-index: 300;
-  display: none; /* 表示する際は JS で 'flex' にしてください */
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  display: none; /* 開くときは JS で 'flex' */
   box-sizing: border-box;
 
-  /* iPhoneのボトムバー・上部ノッチを回避するセーフエリア余白 */
-  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)) 16px;
+  /* ★ここがポイント：親側にスクロールを持たせる */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+
+  /* 上下のセーフエリアと余白 */
+  padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom)) 20px;
 }
 
 /* 設定ウィンドウ本体 */
 .settings-box {
-  /* 【必須】paddingとborderを高さ計算に含め、下へのはみ出しを防ぐ */
   box-sizing: border-box;
-  
   background: #162447;
   border-radius: 14px;
   border: 2px solid #4ecca3;
   width: 100%;
   max-width: 450px;
-  max-height: 100%; /* 親のpadding内側にきっちり収める */
   
-  /* 画面の高さ（vh）に合わせて自動で適度に縮む可変余白 */
-  padding: clamp(14px, 2.5vh, 20px);
-  gap: clamp(8px, 1.5vh, 12px);
-  line-height: 1.35; /* 行間を少し締めて全体の高さを圧縮 */
+  /* ★超重要：margin: auto により「収まる時は完全中央寄せ」「溢れる時は上部が消えずにスクロール可能」になる */
+  margin: auto;
 
+  padding: clamp(14px, 2.5vh, 20px);
+  gap: 12px;
+  line-height: 1.35;
   display: flex;
   flex-direction: column;
-  
-  /* 中身が収まればスクロールバーなし、はみ出た時だけスクロール */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
 }
 
-/* --- 中身の不要なデフォルト余白をカットして高さを浮かせる --- */
+/* 中身の不要な余白リセット */
 .settings-box h2,
 .settings-box h3,
 .settings-box p {
   margin: 0;
-}
-
-.settings-box button,
-.settings-box input,
-.settings-box select {
-  box-sizing: border-box;
-  padding: 8px 12px;
 }
 
     .settings-section { border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px; flex-shrink: 0; }
