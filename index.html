@@ -44,8 +44,12 @@
     }
     .settings-box {
       background: #162447; padding: 20px; border-radius: 15px; border: 2px solid #4ecca3;
-      width: 90%; max-width: 450px; max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;
+      width: 90%; max-width: 450px; max-height: 85vh; /* iOS対応のため余裕を持たせる */
+      overflow-y: auto; display: block; /* Flexboxによるレイアウト崩れ防止 */
     }
+    .settings-box > * { margin-bottom: 15px; }
+    .settings-box > *:last-child { margin-bottom: 0; }
+
     .settings-section { border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px; }
     .config-btn { background: #0f3460; border: 1px solid #4ecca3; color: white; border-radius: 5px; padding: 6px; cursor: pointer; font-size: 0.85rem; width: 110px; text-align: center; }
     .config-btn:active { background: #e94560; }
@@ -152,8 +156,6 @@
 
   <!-- メニュー -->
   <div id="menu-overlay">
-    <button class="small-btn" style="position: absolute; top: 15px; right: 15px; padding: 8px 16px;" onclick="openSettings()">⚙️設定</button>
-
     <div id="main-menu" style="display:flex; flex-direction:column; gap:15px; align-items:center;">
       <h1 class="title">ぱねぽ</h1>
       
@@ -170,6 +172,7 @@
 
       <button class="btn" onclick="startSingleGame()">ひとりで練習</button>
       <button class="btn" onclick="showComMenu()">COMと対戦</button>
+      <button class="btn" onclick="openSettings()" style="background:#1a4d3e; border-color:#4ecca3;">⚙️設定</button>
       
       <div style="border-top:1px solid rgba(255,255,255,0.2); width:100%; margin:5px 0;"></div>
       
@@ -429,10 +432,12 @@
         this.nextRow = []; 
         this.riseOffset = 0; 
         
-        this.riseSpeed = 0.0008 - (handicap - 3) * 0.0002;
-        if (this.riseSpeed < 0.0002) this.riseSpeed = 0.0002;
+        // 激ムズ(不利:1)だったスピードを基準(普通:3)に引き上げ、難易度に応じて調整
+        this.riseSpeed = 0.0012 - (handicap - 3) * 0.0003;
+        if (this.riseSpeed < 0.0003) this.riseSpeed = 0.0003;
 
         this.stopTimer = 0;
+        this.dangerTimer = 180; // 天井到達時のゲームオーバー猶予(約3秒)
         this.score = 0; this.chain = 0;
         this.gameOver = false;
         this.cursor = { x: 2, y: 6 };
@@ -500,8 +505,8 @@
         
         const isFloating = (b, c_idx) => b && r < this.rows - 1 && this.grid[r+1][c_idx] === null;
 
-        if (b1 && b1.state !== 'normal') return false;
-        if (b2 && b2.state !== 'normal') return false;
+        if (b1 && (b1.state !== 'normal' && b1.state !== 'transforming_wait')) return false;
+        if (b2 && (b2.state !== 'normal' && b2.state !== 'transforming_wait')) return false;
         if (b1 && b1.type === 'garbage') return false;
         if (b2 && b2.type === 'garbage') return false;
         if (isFloating(b1, c) || isFloating(b2, c + 1)) return false;
@@ -527,13 +532,7 @@
 
       pushNewRow() {
         this.riseOffset = 0;
-        for (let c = 0; c < this.cols; c++) {
-          if (this.grid[0][c] !== null) {
-            this.gameOver = true;
-            if (this.onStateChange) this.onStateChange('gameover');
-            return;
-          }
-        }
+        // 即死判定を削除し、update内のdangerTimerで制御
         for (let r = 0; r < this.rows - 1; r++) this.grid[r] = this.grid[r + 1];
         this.grid[this.rows - 1] = this.nextRow;
         this.nextRow = this.createNextRow();
@@ -551,18 +550,12 @@
         this.garbageQueue.push({ w, h: adjustedH, delay: 150, isHard }); 
       }
 
-      spawnGarbage() {
-        const g = this.garbageQueue.shift();
+      spawnGarbage(g) {
         const groupId = Date.now() + Math.random();
-        const startCol = Math.floor(Math.random() * (this.cols - g.w + 1));
+        const startCol = g.startCol;
         for (let r = 0; r < g.h; r++) {
           for (let c = 0; c < g.w; c++) {
             const actualCol = startCol + c;
-            if (this.grid[r][actualCol] !== null) { 
-              this.gameOver = true;
-              if (this.onStateChange) this.onStateChange('gameover');
-              return; 
-            }
             this.grid[r][actualCol] = { type: 'garbage', state: 'fall', fallY: 0, timer: 0, groupId: groupId, isHard: g.isHard };
           }
         }
@@ -602,70 +595,140 @@
             }
           }
 
-          let didTransform = false;
           triggeredGroupIds.forEach(groupId => {
-            let maxR = -1;
-            let isHardGroup = false;
-            
+            let cells = [];
             for (let rr = 0; rr < this.rows; rr++) {
               for (let cc = 0; cc < this.cols; cc++) {
                 const b = this.grid[rr][cc];
                 if (b && b.type === 'garbage' && b.groupId === groupId) {
-                  if (rr > maxR) maxR = rr;
-                  if (b.isHard) isHardGroup = true;
+                  cells.push({r: rr, c: cc, b: b});
                 }
               }
             }
+            if (cells.length === 0) return;
+
+            let isHardGroup = cells.some(item => item.b.isHard);
+            let maxR = Math.max(...cells.map(item => item.r));
             
+            let targetCells = [];
             if (isHardGroup) {
-              for (let rr = 0; rr < this.rows; rr++) {
-                for (let cc = 0; cc < this.cols; cc++) {
-                  const b = this.grid[rr][cc];
-                  if (b && b.type === 'garbage' && b.groupId === groupId) {
-                    b.isHard = false;
-                  }
-                }
-              }
-              didTransform = true;
+              targetCells = cells; // 全体を柔らかくする
             } else {
-              if (maxR !== -1) {
-                for (let cc = 0; cc < this.cols; cc++) {
-                  const b = this.grid[maxR][cc];
-                  if (b && b.type === 'garbage' && b.groupId === groupId) {
-                    const validConfigs = COLORS.filter(c => !c.isSpecial);
-                    b.type = validConfigs[Math.floor(Math.random() * validConfigs.length)].id;
-                    b.state = 'hover'; 
-                    b.timer = 15; 
-                    b.chainEligible = true; 
-                    delete b.groupId; 
-                    delete b.isHard;
-                    didTransform = true;
-                  }
-                }
-              }
+              targetCells = cells.filter(item => item.r === maxR); // 最下段のみ通常ブロック化
             }
+
+            // 右から左（同列なら下から上）へソートしてアニメーションの順番をつける
+            targetCells.sort((a, b) => {
+              if (b.c !== a.c) return b.c - a.c;
+              return b.r - a.r;
+            });
+
+            targetCells.forEach((item, idx) => {
+              item.b.state = 'transforming';
+              item.b.transformDelay = idx * 6; // 6フレームごとに変換
+              item.b.transformToNormal = !isHardGroup;
+            });
+
+            cells.forEach(item => {
+              if (item.b.state !== 'transforming') {
+                item.b.state = 'transforming_wait';
+              }
+            });
           });
-          
-          if (didTransform) SE.play('garbageErase');
         }
       }
 
       update() {
         if (this.gameOver || isMatchOver) return;
 
-        if (this.isRisingManualBtn || this.isRisingManualKey || this.isRisingManualPad) {
-          this.manualRiseStep();
-        } else {
-          if (this.stopTimer > 0) this.stopTimer--;
-          else {
-            this.riseOffset += this.riseSpeed;
-            if (this.riseOffset >= 1.0) this.pushNewRow();
+        let needsMatchCheck = false;
+        let isMoving = false;
+        
+        // 変換アニメーションと待機中の管理
+        for (let r = 0; r < this.rows; r++) {
+          for (let c = 0; c < this.cols; c++) {
+            const b = this.grid[r][c];
+            if (b && b.type === 'garbage' && b.state === 'transforming') {
+              isMoving = true;
+              if (b.transformDelay > 0) b.transformDelay--;
+              if (b.transformDelay <= 0) {
+                if (b.transformToNormal) {
+                  const validConfigs = COLORS.filter(col => !col.isSpecial);
+                  b.type = validConfigs[Math.floor(Math.random() * validConfigs.length)].id;
+                  b.state = 'hover';
+                  b.timer = 15;
+                  b.chainEligible = true;
+                  delete b.groupId;
+                  delete b.isHard;
+                } else {
+                  b.isHard = false;
+                  b.state = 'normal';
+                }
+                SE.play('garbageErase');
+              }
+            } else if (b && b.type === 'garbage' && b.state === 'transforming_wait') {
+              isMoving = true;
+            }
           }
         }
 
-        let needsMatchCheck = false;
-        let isMoving = false;
+        // 天井チェックとスポーンチェック
+        let isTopFilled = false;
+        for (let c = 0; c < this.cols; c++) {
+          if (this.grid[0][c] !== null) { isTopFilled = true; break; }
+        }
 
+        let garbageBlocked = false;
+        if (!isMoving && this.garbageQueue.length > 0) {
+          if (this.garbageQueue[0].delay > 0) {
+            this.garbageQueue[0].delay--;
+          } else {
+            const g = this.garbageQueue[0];
+            if (g.startCol === undefined) g.startCol = Math.floor(Math.random() * (this.cols - g.w + 1));
+            let canSpawn = true;
+            for (let r = 0; r < g.h; r++) {
+              for (let c = 0; c < g.w; c++) {
+                if (this.grid[r][g.startCol + c] !== null) { canSpawn = false; break; }
+              }
+              if (!canSpawn) break;
+            }
+            if (canSpawn) {
+              this.spawnGarbage(g);
+              this.garbageQueue.shift();
+            } else {
+              garbageBlocked = true;
+            }
+          }
+        }
+
+        // 天井またはお邪魔の詰まりがある場合は猶予タイマーを減らす
+        if (isTopFilled || garbageBlocked) {
+          if (!isMoving) {
+            this.dangerTimer--;
+            if (this.dangerTimer <= 0) {
+              this.gameOver = true;
+              if (this.onStateChange) this.onStateChange('gameover');
+              return;
+            }
+          }
+        } else {
+          this.dangerTimer = 180;
+        }
+
+        // せり上がり処理（詰まっている時は上がらない）
+        if (!isTopFilled && !garbageBlocked) {
+          if (this.isRisingManualBtn || this.isRisingManualKey || this.isRisingManualPad) {
+            this.manualRiseStep();
+          } else {
+            if (this.stopTimer > 0) this.stopTimer--;
+            else {
+              this.riseOffset += this.riseSpeed;
+              if (this.riseOffset >= 1.0) this.pushNewRow();
+            }
+          }
+        }
+
+        // マッチングと落下の処理
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
             const b = this.grid[r][c];
@@ -703,8 +766,19 @@
         }
 
         garbageGroups.forEach((cells, groupId) => {
+          const hasTransforming = cells.some(item => item.block.state === 'transforming');
+          if (!hasTransforming) {
+            cells.forEach(item => {
+              if (item.block.state === 'transforming_wait') {
+                item.block.state = 'hover';
+                item.block.timer = 10;
+              }
+            });
+          }
+
           const leader = cells[0].block;
-          
+          if (leader.state === 'transforming' || leader.state === 'transforming_wait') return;
+
           if (leader.state === 'hover') {
             isMoving = true;
             leader.timer--;
@@ -854,11 +928,6 @@
         }
 
         if (needsMatchCheck) this.checkMatches();
-        
-        if (!isMoving && this.garbageQueue.length > 0) {
-          if (this.garbageQueue[0].delay > 0) this.garbageQueue[0].delay--;
-          else this.spawnGarbage();
-        }
       }
 
       checkMatches() {
@@ -931,7 +1000,7 @@
           for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
               const b = this.grid[r][c];
-              if (b && (b.state === 'match' || b.state === 'fall' || b.state === 'hover')) isMoving = true;
+              if (b && (b.state === 'match' || b.state === 'fall' || b.state === 'hover' || b.state === 'transforming' || b.state === 'transforming_wait')) isMoving = true;
             }
           }
           if (!isMoving) {
@@ -1040,7 +1109,8 @@
         this.moveInterval = [15, 10, 5, 2][level - 1];   
         this.actionTimer = this.thinkInterval;
         this.moveTimer = 0;
-        this.engine.riseSpeed = 0.0006 + (level * 0.0002); 
+        // プレイヤーのスピード変更に合わせる
+        this.engine.riseSpeed = 0.0010 + (level * 0.0002); 
       }
       update() {
         if (this.engine.gameOver || isMatchOver) return;
@@ -1432,7 +1502,8 @@
     }
 
     function exitGame() {
-      if (myEngine && !myEngine.gameOver && currentMode !== 'single') {
+      // isMatchOver(勝敗モーダル時)はアラートを出さない
+      if (myEngine && !myEngine.gameOver && currentMode !== 'single' && !isMatchOver) {
         if (!confirm("退出してメニューに戻りますか？\n（対戦時は負けになります）")) return;
         onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'leave' }); });
       }
@@ -1977,8 +2048,6 @@
         gameContainer.style.padding = '0';
 
         // 相手盤面（上部24%）と自分の盤面が絶対に重ならないための厳密不等式計算
-        // 中心が H*0.5、上端が H*0.5 - (515 * myScale)/2
-        // 上端 >= maxTopH + 8px を満たす最大スケールを適用
         const maxCenterH = Math.max(100, (H * 0.5 - maxTopH - 10) * 2);
         let myScale = Math.min(1.0, maxCenterH / 515);
         const contentW = 344;
