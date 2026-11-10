@@ -730,43 +730,48 @@
             }
           }
 
-          triggeredGroupIds.forEach(groupId => {
-            let cells = [];
-            for (let rr = 0; rr < this.rows; rr++) {
-              for (let cc = 0; cc < this.cols; cc++) {
-                const b = this.grid[rr][cc];
-                if (b && b.type === 'garbage' && b.groupId === groupId) {
-                  cells.push({r: rr, c: cc, b: b});
-                }
+          let cells = [];
+          for (let rr = 0; rr < this.rows; rr++) {
+            for (let cc = 0; cc < this.cols; cc++) {
+              const b = this.grid[rr][cc];
+              if (b && b.type === 'garbage' && triggeredGroupIds.has(b.groupId)) {
+                cells.push({r: rr, c: cc, b: b});
               }
             }
-            if (cells.length === 0) return;
+          }
+          if (cells.length === 0) return;
 
-            let isHardGroup = cells.some(item => item.b.isHard);
-            let maxR = Math.max(...cells.map(item => item.r));
+          // 各groupIdごとに最下段の行(最大のr)を求める
+          let groupMaxR = {};
+          triggeredGroupIds.forEach(gid => {
+            let rs = cells.filter(item => item.b.groupId === gid).map(item => item.r);
+            if (rs.length > 0) {
+              groupMaxR[gid] = Math.max(...rs);
+            }
+          });
+          
+          let uniqueRows = [...new Set(cells.map(item => item.r))].sort((a, b) => b - a);
+          let orderedCells = [];
+          uniqueRows.forEach((row, index) => {
+            let rowCells = cells.filter(item => item.r === row);
+            if (index % 2 === 0) {
+              rowCells.sort((a, b) => b.c - a.c);
+            } else {
+              rowCells.sort((a, b) => a.c - b.c);
+            }
+            orderedCells.push(...rowCells);
+          });
+
+          const transformGroupId = Date.now() + Math.random();
+
+          orderedCells.forEach((item, idx) => {
+            let isGroupBottom = (item.r === groupMaxR[item.b.groupId]);
             
-            let uniqueRows = [...new Set(cells.map(item => item.r))].sort((a, b) => b - a);
-            let orderedCells = [];
-            uniqueRows.forEach((row, index) => {
-              let rowCells = cells.filter(item => item.r === row);
-              if (index % 2 === 0) {
-                rowCells.sort((a, b) => b.c - a.c);
-              } else {
-                rowCells.sort((a, b) => a.c - b.c);
-              }
-              orderedCells.push(...rowCells);
-            });
-
-            const transformGroupId = Date.now() + Math.random();
-
-            orderedCells.forEach((item, idx) => {
-              let isTarget = isHardGroup ? true : (item.r === maxR);
-              item.b.state = 'transforming';
-              item.b.transformDelay = idx * 3;
-              item.b.isTarget = isTarget;
-              item.b.transformToNormal = isTarget && !isHardGroup;
-              item.b.transformGroupId = transformGroupId;
-            });
+            item.b.state = 'transforming';
+            item.b.transformDelay = idx * 3;
+            item.b.isTarget = isGroupBottom;
+            item.b.transformToNormal = isGroupBottom && !item.b.isHard;
+            item.b.transformGroupId = transformGroupId;
           });
         }
       }
@@ -1656,6 +1661,23 @@
 
     function checkPanic() {
       if (!myEngine || matchState !== 'playing' || isMatchOver) return;
+      
+      // お邪魔ブロックの落下中や消去などの全体的な動きがある間は判定を保留する
+      let isMoving = false;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const b = myEngine.grid[r][c];
+          if (b && (b.state === 'fall' || b.state === 'hover' || b.state === 'transforming' || b.state === 'transforming_wait' || b.state === 'transformed_wait' || b.state === 'match')) {
+             isMoving = true; break;
+          }
+        }
+        if (isMoving) break;
+      }
+      
+      // 予告からお邪魔が降ってくるのを待っている間も保留
+      if (myEngine.garbageQueue.length > 0) isMoving = true; 
+      
+      if (isMoving) return;
       
       let panic = false;
       for (let r = 0; r <= 2; r++) {
