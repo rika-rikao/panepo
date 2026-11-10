@@ -2492,13 +2492,23 @@
       setupInput();
       resetGameLogicOnline(config);
       
-      if (myOnlineId === 'host') {
-        handleBoardReady('host');
-      } else {
-        if (onlineConnections[0] && onlineConnections[0].open) {
-          onlineConnections[0].send({ type: 'board_ready', senderId: myOnlineId });
+      if (loopId) cancelAnimationFrame(loopId);
+      lastTime = performance.now();
+      accumulator = 0;
+      loopId = requestAnimationFrame(gameLoop);
+      
+      startSyncInterval();
+
+      // 盤面の描画と初期同期を完了させるための待機時間
+      setTimeout(() => {
+        if (myOnlineId === 'host') {
+          handleBoardReady('host');
+        } else {
+          if (onlineConnections[0] && onlineConnections[0].open) {
+            onlineConnections[0].send({ type: 'board_ready', senderId: myOnlineId });
+          }
         }
-      }
+      }, 800);
     }
 
     function handleBoardReady(senderId) {
@@ -2525,6 +2535,7 @@
       readyBgm();
       showReadyGo(); 
 
+      // 既に prepareMatchLocal で起動しているが、タイミングを合わせるため念のため再設定
       if (loopId) cancelAnimationFrame(loopId);
       lastTime = performance.now();
       accumulator = 0;
@@ -2624,7 +2635,7 @@
     function startSyncInterval() {
       if (syncIntervalId) clearInterval(syncIntervalId);
       syncIntervalId = setInterval(() => {
-        if (!myEngine || matchState === 'preparing') return;
+        if (!myEngine) return;
         
         if (!isPracticeMode && !isMatchOver) {
            const syncData = { 
