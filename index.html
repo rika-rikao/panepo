@@ -9,12 +9,19 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     :root { --bg-color: #1a1a2e; }
-    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; touch-action: none; margin: 0; padding: 0; }
+    
+    /* 
+       ★修正: 全要素への touch-action: none は外してbody等に限定する 
+       （これにより設定画面でのスクロールがシステムにブロックされなくなります）
+    */
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
+    
     body {
       background-color: var(--bg-color); color: #fff;
       font-family: 'Segoe UI', Tahoma, sans-serif;
       overflow: hidden; width: 100vw; height: 100vh;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
+      touch-action: none; /* ゲーム領域でのスワイプ暴発防止 */
     }
     
     .small-btn { background: #0f3460; color: #fff; border: 1px solid #4ecca3; padding: 6px 12px; font-size: 0.9rem; border-radius: 15px; cursor: pointer; }
@@ -38,17 +45,22 @@
     .input-box { padding: 10px; border-radius: 20px; border: 2px solid #4ecca3; background: #162447; color: #fff; text-align: center; width: 240px; outline: none; }
     
     /* ===================================================
-       設定画面モーダル (根本から見直し版)
+       設定画面モーダル (アドレスバー回避＆スクロール完全対応版)
        =================================================== */
     #settings-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.9);
+      background: rgba(0, 0, 0, 0.95);
       z-index: 300;
-      display: none; /* JSで display: block; に切り替える */
+      display: none;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       padding: 0;
+    }
+
+    /* 設定領域とその子要素はスクロール（パン操作）を許可する */
+    #settings-overlay, #settings-overlay * {
+      touch-action: auto !important;
     }
 
     .settings-box {
@@ -57,10 +69,10 @@
       border: 2px solid #4ecca3;
       width: 90%;
       max-width: 450px;
-      /* 上に最低40px、下に最低80pxの余白を設けることでアドレスバーを回避 */
-      margin: max(40px, env(safe-area-inset-top)) auto 80px auto; 
-      padding: 18px;
-      gap: 12px;
+      /* 上部余白40px、下部余白120pxをとることでアドレスバーに隠れるのを防ぐ */
+      margin: max(40px, env(safe-area-inset-top)) auto 120px auto; 
+      padding: 20px;
+      gap: 15px;
       line-height: 1.35;
       display: flex;
       flex-direction: column;
@@ -68,7 +80,7 @@
     }
 
     .settings-box h2, .settings-box h3, .settings-box p { margin: 0; }
-    .settings-box button.btn { flex-shrink: 0; min-height: 44px; }
+    .settings-box button.btn { flex-shrink: 0; min-height: 44px; margin-top: 10px; }
 
     .settings-section { border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px; flex-shrink: 0; }
     .config-btn { background: #0f3460; border: 1px solid #4ecca3; color: white; border-radius: 5px; padding: 6px; cursor: pointer; font-size: 0.85rem; width: 110px; text-align: center; }
@@ -91,7 +103,12 @@
       position: relative;
     }
     .board-header { font-size: 0.95rem; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; width: 100%; }
-    .canvas-container { border: 4px solid #3282b8; border-bottom: none; border-radius: 6px 6px 0 0; background: #000; box-shadow: 0 0 15px rgba(0,0,0,0.8); overflow: hidden; touch-action: none; }
+    
+    .canvas-container { 
+      border: 4px solid #3282b8; border-bottom: none; border-radius: 6px 6px 0 0; 
+      background: #000; box-shadow: 0 0 15px rgba(0,0,0,0.8); overflow: hidden; 
+      touch-action: none; /* キャンバスのスワイプ暴発防止 */
+    }
     
     /* ターゲット枠線とバッジ */
     .rival-board { cursor: pointer; border-radius: 8px; padding: 2px; }
@@ -163,7 +180,7 @@
         <div id="key-config-list" style="display:flex; flex-direction:column; gap:8px;"></div>
       </div>
 
-      <button class="btn" style="width: 100%; margin-top: 10px; flex-shrink: 0;" onclick="closeSettings()">設定を保存して閉じる</button>
+      <button class="btn" style="width: 100%;" onclick="closeSettings()">設定を保存して閉じる</button>
     </div>
   </div>
 
@@ -276,7 +293,7 @@
     ];
 
     // ==========================================
-    // SE & BGM 制御 (Web Audio API)
+    // SE & BGM 制御 (Web Audio API & HTML5 Audio)
     // ==========================================
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const audioCtx = new AudioContext();
@@ -322,13 +339,20 @@
     };
     SE.load();
 
+    // BGM用Audio。ラグなし切り替えのため2つのインスタンスを用意
     let bgmAudio = new Audio();
+    let panicBgmAudio = new Audio('assets/bgm/panic00.m4a');
+    panicBgmAudio.loop = true;
+
     let bgmPlaylist = [], currentBgmIndex = 0, isBgmPlaying = false, bgmNeedsPlay = false;
 
     const savedSeVol = localStorage.getItem('pdw_se_vol');
     if (savedSeVol !== null) SE.volume = parseFloat(savedSeVol);
     const savedBgmVol = localStorage.getItem('pdw_bgm_vol');
-    if (savedBgmVol !== null) bgmAudio.volume = parseFloat(savedBgmVol);
+    if (savedBgmVol !== null) {
+      bgmAudio.volume = parseFloat(savedBgmVol);
+      panicBgmAudio.volume = parseFloat(savedBgmVol);
+    }
 
     document.getElementById('se-volume').value = SE.volume;
     document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
@@ -341,9 +365,11 @@
       localStorage.setItem('pdw_se_vol', SE.volume);
     });
     document.getElementById('bgm-volume').addEventListener('input', (e) => {
-      bgmAudio.volume = parseFloat(e.target.value);
-      document.getElementById('bgm-volume-val').innerText = Math.floor(bgmAudio.volume * 100);
-      localStorage.setItem('pdw_bgm_vol', bgmAudio.volume);
+      const vol = parseFloat(e.target.value);
+      bgmAudio.volume = vol;
+      panicBgmAudio.volume = vol;
+      document.getElementById('bgm-volume-val').innerText = Math.floor(vol * 100);
+      localStorage.setItem('pdw_bgm_vol', vol);
     });
 
     function handleBgmFiles(files) {
@@ -362,7 +388,7 @@
     function toggleBgmPlay() {
       if (bgmPlaylist.length === 0) { showToast('先にBGMファイルを選択してください'); return; }
       if (isBgmPlaying) {
-        bgmAudio.pause(); isBgmPlaying = false;
+        bgmAudio.pause(); panicBgmAudio.pause(); isBgmPlaying = false;
       } else {
         bgmAudio.loop = false;
         bgmAudio.play().then(() => { isBgmPlaying = true; bgmNeedsPlay = false; }).catch(() => showToast('再生エラー'));
@@ -373,15 +399,14 @@
       if (bgmPlaylist.length > 0) {
         currentBgmIndex = (currentBgmIndex + 1) % bgmPlaylist.length;
         bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
-        bgmAudio.play().catch(()=>{});
+        if (isBgmPlaying && !isPanic) bgmAudio.play().catch(()=>{});
       }
     });
 
     function stopBgm() {
-      if (isBgmPlaying || !bgmAudio.paused) {
-        bgmAudio.pause();
-        isBgmPlaying = false;
-      }
+      bgmAudio.pause();
+      panicBgmAudio.pause();
+      isBgmPlaying = false;
     }
 
     // ゲーム開始時等にBGMを強制的に先頭から一時停止状態でセットアップする
@@ -391,26 +416,29 @@
         bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
         bgmAudio.loop = false;
       } else {
-        bgmAudio.src = 'assets/bgm/main00.m4a';
+        if (!bgmAudio.src.includes('main00.m4a')) {
+          bgmAudio.src = 'assets/bgm/main00.m4a';
+        }
         bgmAudio.loop = true;
       }
       bgmAudio.currentTime = 0;
+      panicBgmAudio.currentTime = 0;
       
       // 一瞬再生させてすぐ止めることで、後続のタイマー内での自動再生を許可させる
-      bgmAudio.play().then(() => { 
-        bgmAudio.pause(); 
-        isBgmPlaying = false; 
-      }).catch(e => console.warn(e));
+      bgmAudio.play().then(() => bgmAudio.pause()).catch(e => console.warn(e));
+      panicBgmAudio.play().then(() => panicBgmAudio.pause()).catch(e => console.warn(e));
       
       isPanic = false;
-      mainBgmTime = 0;
     }
 
     // Go!! と同時に呼び出されるBGM再開処理
     function resumeBgm() {
-      bgmAudio.play().then(() => {
-        isBgmPlaying = true;
-      }).catch(e => console.warn(e));
+      if (isPanic) {
+        panicBgmAudio.play().catch(e => console.warn(e));
+      } else {
+        bgmAudio.play().catch(e => console.warn(e));
+      }
+      isBgmPlaying = true;
     }
 
     // --- コンフィグ管理 ---
@@ -615,7 +643,7 @@
         for (let r = 0; r < g.h; r++) {
           for (let c = 0; c < g.w; c++) {
             const actualCol = startCol + c;
-            this.grid[r][actualCol] = { type: 'garbage', state: 'fall', fallY: 0, timer: 0, groupId: groupId, isHard: g.isHard };
+            this.grid[r][actualCol] = { type: 'garbage', state: 'fall', fallY: 0, timer: 0, groupId: groupId, isHard: g.isHard, particleTimer: 0 };
           }
         }
       }
@@ -669,41 +697,28 @@
             let isHardGroup = cells.some(item => item.b.isHard);
             let maxR = Math.max(...cells.map(item => item.r));
             
-            let targetCells = [];
-            if (isHardGroup) {
-              targetCells = cells; 
-            } else {
-              targetCells = cells.filter(item => item.r === maxR); 
-            }
-
-            // 下の段 (rが大きい) ほど先に消えるようにソート、同じ段なら左 (cが小さい) から
-            targetCells.sort((a, b) => {
-              if (b.r !== a.r) return b.r - a.r;
-              return a.c - b.c;
+            // 蛇行順序を作成 (下から上へ、段ごとに左右反転)
+            let uniqueRows = [...new Set(cells.map(item => item.r))].sort((a, b) => b - a);
+            let orderedCells = [];
+            uniqueRows.forEach((row, index) => {
+              let rowCells = cells.filter(item => item.r === row);
+              if (index % 2 === 0) {
+                rowCells.sort((a, b) => b.c - a.c); // 右から左
+              } else {
+                rowCells.sort((a, b) => a.c - b.c); // 左から右
+              }
+              orderedCells.push(...rowCells);
             });
 
             const transformGroupId = Date.now() + Math.random();
 
-            let currentR = targetCells.length > 0 ? targetCells[0].r : 0;
-            let currentDelay = 0;
-
-            targetCells.forEach((item) => {
-              // 段が変わるごとに遅延を追加
-              if (item.r !== currentR) {
-                currentR = item.r;
-                currentDelay += 6; 
-              }
+            orderedCells.forEach((item, idx) => {
+              let isTarget = isHardGroup ? true : (item.r === maxR);
               item.b.state = 'transforming';
-              item.b.transformDelay = currentDelay;
-              item.b.transformToNormal = !isHardGroup;
+              item.b.transformDelay = idx * 3; // アニメーション速度（フレーム単位）
+              item.b.isTarget = isTarget;
+              item.b.transformToNormal = isTarget && !isHardGroup;
               item.b.transformGroupId = transformGroupId;
-            });
-
-            cells.forEach(item => {
-              if (item.b.state !== 'transforming') {
-                item.b.state = 'transforming_wait';
-                item.b.transformGroupId = transformGroupId;
-              }
             });
           });
         }
@@ -714,6 +729,7 @@
 
         let needsMatchCheck = false;
         let isMoving = false;
+        let playedGarbageSE = false;
         
         let transformGroups = new Map();
         for (let r = 0; r < this.rows; r++) {
@@ -748,21 +764,32 @@
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
             const b = this.grid[r][c];
+            if (b && b.particleTimer > 0) b.particleTimer--;
+
             if (b && b.state === 'transforming') {
               isMoving = true;
               if (b.transformDelay > 0) b.transformDelay--;
               if (b.transformDelay <= 0) {
-                if (b.transformToNormal) {
-                  const validConfigs = COLORS.filter(col => !col.isSpecial);
-                  b.type = validConfigs[Math.floor(Math.random() * validConfigs.length)].id;
+                if (b.isTarget) {
+                  if (b.transformToNormal) {
+                    const validConfigs = COLORS.filter(col => !col.isSpecial);
+                    b.type = validConfigs[Math.floor(Math.random() * validConfigs.length)].id;
+                    b.chainEligible = true;
+                    delete b.isHard;
+                  } else {
+                    b.isHard = false;
+                  }
                   b.state = 'transformed_wait';
-                  b.chainEligible = true;
-                  delete b.isHard;
                 } else {
-                  b.isHard = false;
-                  b.state = 'transformed_wait';
+                  // 非ターゲットブロック(通過エフェクト)
+                  b.state = 'transforming_wait';
+                  b.particleTimer = 15;
                 }
-                SE.play('garbageErase');
+
+                if (!playedGarbageSE) {
+                  SE.play('garbageErase');
+                  playedGarbageSE = true;
+                }
               }
             } else if (b && (b.state === 'transforming_wait' || b.state === 'transformed_wait')) {
               isMoving = true;
@@ -1161,6 +1188,20 @@
                   // 普通のお邪魔は「◯」
                   ctx.fillStyle = 'rgba(255,255,255,0.08)';
                   ctx.beginPath(); ctx.arc(x+CELL_PX/2, y+CELL_PX/2, CELL_PX/4, 0, Math.PI*2); ctx.fill();
+                }
+
+                // 順番待ちブロックを暗くするか、直前に光らせる
+                if (b.state === 'transforming') {
+                  if (b.transformDelay < 4) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${(4 - b.transformDelay) / 4})`;
+                    ctx.fillRect(x, y, CELL_PX, CELL_PX);
+                  }
+                }
+                
+                // 通過パーティクル描画
+                if (b.particleTimer > 0) {
+                  ctx.fillStyle = `rgba(255, 255, 255, ${b.particleTimer / 15})`;
+                  ctx.fillRect(x, y, CELL_PX, CELL_PX);
                 }
               } else {
                 const conf = COLORS.find(item => item.id === b.type);
@@ -1619,25 +1660,32 @@
     }
 
     function switchBgmToPanic(toPanic) {
-      const wasPlaying = !bgmAudio.paused;
-      
+      const isMainPlaying = !bgmAudio.paused;
+      const isPanicPlaying = !panicBgmAudio.paused;
+      const playing = isMainPlaying || isPanicPlaying || matchState === 'playing';
+
       if (toPanic) {
         if (bgmAudio.src.includes('main00') || bgmPlaylist.length > 0) {
           mainBgmTime = bgmAudio.currentTime;
         }
-        bgmAudio.src = 'assets/bgm/panic00.m4a';
-        bgmAudio.loop = true;
-        if (wasPlaying || matchState === 'playing') bgmAudio.play().catch(()=>{});
-      } else {
-        if (bgmPlaylist.length > 0) {
-          bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
-          bgmAudio.loop = false;
-        } else {
-          bgmAudio.src = 'assets/bgm/main00.m4a';
-          bgmAudio.loop = true;
+        bgmAudio.pause();
+        if (playing) {
+          panicBgmAudio.currentTime = 0;
+          panicBgmAudio.play().catch(()=>{});
         }
-        bgmAudio.currentTime = mainBgmTime; // 通常時に戻った場合は位置を復元
-        if (wasPlaying || matchState === 'playing') bgmAudio.play().catch(()=>{});
+      } else {
+        panicBgmAudio.pause();
+        if (playing) {
+          if (bgmPlaylist.length > 0) {
+            bgmAudio.src = URL.createObjectURL(bgmPlaylist[currentBgmIndex]);
+            bgmAudio.loop = false;
+          } else {
+            bgmAudio.src = 'assets/bgm/main00.m4a';
+            bgmAudio.loop = true;
+          }
+          bgmAudio.currentTime = mainBgmTime; // 通常時に戻った場合は位置を復元
+          bgmAudio.play().catch(()=>{});
+        }
       }
     }
 
