@@ -20,6 +20,11 @@
       touch-action: none;
     }
     
+    :focus-visible, button:focus, select:focus, input:focus {
+      outline: 3px solid #ff007f !important;
+      outline-offset: 2px !important;
+    }
+
     .small-btn { background: #0f3460; color: #fff; border: 1px solid #4ecca3; padding: 6px 12px; font-size: 0.9rem; border-radius: 15px; cursor: pointer; }
     .small-btn:active { background: #e94560; }
 
@@ -89,6 +94,10 @@
       position: relative;
     }
     .board-header { font-size: 0.95rem; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; width: 100%; }
+    
+    /* 自分の枠を緑色に */
+    #my-wrapper .canvas-container { border-color: #00e676 !important; }
+
     .canvas-container { 
       border: 4px solid #3282b8; border-bottom: none; border-radius: 6px 6px 0 0; 
       background: #000; box-shadow: 0 0 15px rgba(0,0,0,0.8); overflow: hidden; 
@@ -347,11 +356,10 @@
     const savedBgmVol = localStorage.getItem('pdw_bgm_vol');
     let initBgmVol = savedBgmVol !== null ? parseFloat(savedBgmVol) : 0.5;
     
-    // mutedを使用してiOS等でvolume変更が効かなくても確実に切り替える
     bgmAudio.volume = initBgmVol;
     bgmAudio.muted = false;
     panicBgmAudio.volume = initBgmVol; 
-    panicBgmAudio.muted = true; // 最初は通常BGMのみ鳴る
+    panicBgmAudio.muted = true;
 
     document.getElementById('se-volume').value = SE.volume;
     document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
@@ -472,7 +480,6 @@
       let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
       bgmAudio.volume = bgmVol; 
       panicBgmAudio.volume = bgmVol;
-      // 再生待ちの間は確実にミュートにしておく
       bgmAudio.muted = true;
       panicBgmAudio.muted = true;
       
@@ -583,7 +590,57 @@
       });
     }
 
+    // ==========================================
+    // メニュー用のゲームパッド監視
+    // ==========================================
+    let lastPadMenuState = {};
+    function pollMenuGamepad() {
+      const pad = navigator.getGamepads()[0];
+      if (!pad) return;
+
+      const justPressed = (btnIdx) => pad.buttons[btnIdx]?.pressed && !lastPadMenuState[btnIdx];
+
+      const isMenuVisible = document.getElementById('menu-overlay').style.display !== 'none' ||
+                            document.getElementById('result-overlay').style.display !== 'none' ||
+                            document.getElementById('settings-overlay').style.display === 'block';
+
+      if (isMenuVisible && matchState !== 'playing') {
+        const focusables = Array.from(document.querySelectorAll('button:not([disabled]), select, input'));
+        const visibleFocusables = focusables.filter(el => {
+          return el.offsetWidth > 0 && el.offsetHeight > 0 && window.getComputedStyle(el).visibility !== 'hidden';
+        });
+
+        if (visibleFocusables.length > 0) {
+          let currentIndex = visibleFocusables.indexOf(document.activeElement);
+          let moved = false;
+
+          // 十字キー上(12) or 左(14)
+          if (justPressed(12) || justPressed(14)) { currentIndex--; moved = true; }
+          // 十字キー下(13) or 右(15)
+          if (justPressed(13) || justPressed(15)) { currentIndex++; moved = true; }
+
+          if (moved) {
+            if (currentIndex < 0) currentIndex = visibleFocusables.length - 1;
+            if (currentIndex >= visibleFocusables.length) currentIndex = 0;
+            visibleFocusables[currentIndex].focus();
+            try { SE.play('cursorMove'); } catch(e){}
+          }
+
+          // Aボタン(0)
+          if (justPressed(0)) {
+            if (document.activeElement && typeof document.activeElement.click === 'function') {
+              document.activeElement.click();
+            }
+          }
+        }
+      }
+
+      pad.buttons.forEach((b, i) => lastPadMenuState[i] = b.pressed);
+    }
+
     setInterval(() => {
+      pollMenuGamepad();
+      
       if (assigningAction && assignType === 'pad') {
         const pad = navigator.getGamepads()[0];
         if (pad) {
@@ -1650,12 +1707,14 @@
       btn.disabled = false;
       btn.innerText = 'もう一度対戦する';
       document.getElementById('result-overlay').style.display = 'flex';
+      
+      // ゲームパッド用フォーカスリセットのため一度他のフォーカスを外す
+      document.activeElement?.blur();
     }
 
     function requestRematch() {
       if (currentMode === 'single' || currentMode === 'com') {
         startGame(currentMode, currentComLevel, currentTotalPlayers);
-        document.getElementById('result-overlay').style.display = 'none';
       } else if (currentMode.startsWith('online')) {
         onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'rematch_req' }); });
         if (myOnlineId === 'host') {
@@ -1664,7 +1723,6 @@
             if(c.open) c.send({ type: 'start_match', config });
           });
           startGameWithConfig({ players: matchPlayersConfig, myId: 'host', matchId: Date.now() });
-          document.getElementById('result-overlay').style.display = 'none';
         } else {
           showToast('ホストの再戦開始を待っています...');
           document.getElementById('result-rematch-btn').disabled = true;
@@ -1766,16 +1824,13 @@
       if (!myEngine || matchState !== 'playing' || isMatchOver) return;
       
       let panic = false;
-      // 高さ70%以上ということは、上から30%以下の位置にブロックが到達した場合
-      const panicThresholdR = ROWS * 0.3; // 12 * 0.3 = 3.6
+      const panicThresholdR = ROWS * 0.3; // 上から30%以下
 
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
           const b = myEngine.grid[r][c];
           if (b !== null) {
-            // 接地済みブロックのみ判定対象（落下中 fall や消去中 match などは含めない）
             if (b.state === 'normal') {
-              // 実際の表示上の行位置 (r - riseOffset) が閾値以下なら高さ70%以上に達している
               if ((r - myEngine.riseOffset) <= panicThresholdR) {
                 panic = true; 
                 break;
@@ -1823,13 +1878,15 @@
     }
 
     function startGame(mode, level = 1, totalPlayers = 2) {
+      // ゲストでもホストでもゲーム開始時は確実にモーダル類を閉じる
+      document.getElementById('result-overlay').style.display = 'none';
+      document.getElementById('menu-overlay').style.display = 'none';
+      document.getElementById('game-area').style.display = 'flex';
+
       currentMode = mode;
       currentComLevel = level;
       currentTotalPlayers = totalPlayers;
       matchState = 'ready';
-      
-      document.getElementById('menu-overlay').style.display = 'none';
-      document.getElementById('game-area').style.display = 'flex';
       
       setupInput();
       resetGameLogic();
@@ -2191,16 +2248,20 @@
       });
 
       peer.on('connection', (c) => {
-        if (onlineConnections.length >= maxPlayers - 1) {
-          c.close(); return;
-        }
-        onlineConnections.push(c);
-        bindConnEvents(c, true); 
-        document.getElementById('waiting-count').innerText = 1 + onlineConnections.length;
-        
-        if (onlineConnections.length >= maxPlayers - 1) {
-          forceStartRoom();
-        }
+        // 通信経路が完全に確立されるのを待ってから開始判定を行う
+        c.on('open', () => {
+          if (onlineConnections.length >= maxPlayers - 1) {
+            c.close(); return;
+          }
+          onlineConnections.push(c);
+          bindConnEvents(c, true); 
+          document.getElementById('waiting-count').innerText = 1 + onlineConnections.length;
+          
+          if (onlineConnections.length >= maxPlayers - 1) {
+            // クライアント側でのリスナー登録を確実に完了させるためのわずかな遅延
+            setTimeout(() => { forceStartRoom(); }, 500);
+          }
+        });
       });
     }
 
@@ -2271,14 +2332,16 @@
     }
 
     function startGameWithConfig(config) {
+      // ゲストでもホストでも確実にモーダル類を閉じる
+      document.getElementById('result-overlay').style.display = 'none';
+      document.getElementById('menu-overlay').style.display = 'none';
+      document.getElementById('game-area').style.display = 'flex';
+
       currentMode = 'online';
       currentMatchId = config.matchId;
       myOnlineId = config.myId;
       matchPlayersConfig = config.players;
       matchState = 'ready';
-
-      document.getElementById('menu-overlay').style.display = 'none';
-      document.getElementById('game-area').style.display = 'flex';
 
       setupInput();
       resetGameLogicOnline(config);
@@ -2442,7 +2505,7 @@
         }
         else if (data.type === 'rematch_req') {
           if (isHostMode) {
-            // ホストは受け取ったら再戦ボタンの同期などに使うが、今回は特に何もしない（ホスト側主導で再開するため）
+            // ホストは受け取ったら再戦ボタンの同期などに使うが、今回は特に何もしない
           }
         }
         else if (data.type === 'leave') {
@@ -2531,7 +2594,8 @@
         gameContainer.style.transform = '';
         gameContainer.style.width = '100%';
         gameContainer.style.height = '100%';
-        gameContainer.style.flexDirection = 'row';
+        // 利き手によって全体のレイアウト（ボタン群・自分・相手の配置）を左右反転させる
+        gameContainer.style.flexDirection = isLeft ? 'row-reverse' : 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.padding = '10px';
@@ -2576,7 +2640,7 @@
         gameContainer.style.transform = '';
         gameContainer.style.width = '100%';
         gameContainer.style.height = '100%';
-        gameContainer.style.flexDirection = 'row';
+        gameContainer.style.flexDirection = isLeft ? 'row-reverse' : 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.paddingBottom = '0px'; 
@@ -2690,7 +2754,7 @@
         controls.style.width = '110px';
         if (handednessWrapper) handednessWrapper.style.marginTop = '0';
 
-        gameContainer.style.flexDirection = 'row';
+        gameContainer.style.flexDirection = isLeft ? 'row-reverse' : 'row';
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.position = 'absolute';
