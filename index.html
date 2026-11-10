@@ -2391,7 +2391,14 @@
 
       myRenderer = new BoardRenderer('my-canvas');
       myEngine = new PonEngine(
-        (state) => { if (state === 'gameover') checkMatchEnd(); },
+        (state) => { 
+          if (state === 'gameover') {
+            onlineConnections.forEach(c => {
+              if (c && c.open) c.send({ type: 'gameover', senderId: myOnlineId });
+            });
+            checkMatchEnd(); 
+          }
+        },
         (totalBlocks, isHard) => { distributeGarbageOnline(myOnlineId, totalBlocks, isHard); },
         handicap,
         true
@@ -2435,7 +2442,14 @@
 
         if (p.type === 'com' && myOnlineId === 'host') {
           rEngine = new PonEngine(
-            (state) => { if (state === 'gameover') checkMatchEnd(); },
+            (state) => { 
+              if (state === 'gameover') {
+                onlineConnections.forEach(c => {
+                  if (c && c.open) c.send({ type: 'gameover', senderId: p.id });
+                });
+                checkMatchEnd(); 
+              }
+            },
             (totalBlocks, isHard) => { distributeGarbageOnline(p.id, totalBlocks, isHard); },
             3,
             false
@@ -2472,7 +2486,8 @@
           const syncData = { 
             type: 'sync', senderId: myOnlineId, grid: myEngine.grid, nextRow: myEngine.nextRow, 
             riseOffset: myEngine.riseOffset, score: myEngine.score, 
-            garbageQueue: myEngine.garbageQueue 
+            garbageQueue: myEngine.garbageQueue,
+            gameOver: myEngine.gameOver
           };
           onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
 
@@ -2482,7 +2497,8 @@
                 const comSyncData = {
                   type: 'sync', senderId: opp.id, grid: opp.engine.grid, nextRow: opp.engine.nextRow, 
                   riseOffset: opp.engine.riseOffset, score: opp.engine.score, 
-                  garbageQueue: opp.engine.garbageQueue 
+                  garbageQueue: opp.engine.garbageQueue,
+                  gameOver: opp.engine.gameOver
                 };
                 onlineConnections.forEach(c => { if (c && c.open) c.send(comSyncData); });
               }
@@ -2502,6 +2518,10 @@
             senderOpp.engine.riseOffset = data.riseOffset;
             senderOpp.engine.score = data.score;
             if (data.garbageQueue) senderOpp.engine.garbageQueue = data.garbageQueue;
+            if (data.gameOver !== undefined) {
+              senderOpp.engine.gameOver = data.gameOver;
+              if (data.gameOver) checkMatchEnd();
+            }
           }
           if (isHostMode) {
             onlineConnections.forEach(otherC => {
@@ -2509,6 +2529,18 @@
             });
           }
         } 
+        else if (data.type === 'gameover') {
+          const senderOpp = opponents.find(o => o.id === data.senderId);
+          if (senderOpp && senderOpp.engine) {
+            senderOpp.engine.gameOver = true;
+            checkMatchEnd();
+          }
+          if (isHostMode) {
+            onlineConnections.forEach(otherC => {
+              if (otherC !== c && otherC.open) otherC.send(data);
+            });
+          }
+        }
         else if (data.type === 'start_countdown') {
           startCountdown();
         }
