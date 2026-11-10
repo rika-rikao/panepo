@@ -672,6 +672,7 @@
         this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
         this.nextRow = []; 
         this.riseOffset = 0; 
+        this.isPractice = false;
         
         this.riseSpeed = 0.0012 - (handicap - 3) * 0.0003;
         if (this.riseSpeed < 0.0003) this.riseSpeed = 0.0003;
@@ -739,7 +740,8 @@
       }
 
       swap(c, r) {
-        if (this.gameOver || isMatchOver || matchState !== 'playing') return false;
+        if (this.gameOver && !this.isPractice) return false;
+        if (matchState !== 'playing' && !this.isPractice) return false;
         if (c < 0 || c >= this.cols - 1 || r < 0 || r >= this.rows) return false;
         const b1 = this.grid[r][c], b2 = this.grid[r][c + 1];
         
@@ -764,7 +766,8 @@
       }
 
       manualRiseStep() {
-        if (this.gameOver || isMatchOver || matchState !== 'playing') return;
+        if (this.gameOver && !this.isPractice) return;
+        if (matchState !== 'playing' && !this.isPractice) return;
         this.stopTimer = 0; 
         this.riseOffset += 0.035; 
         if (this.riseOffset >= 1.0) this.pushNewRow();
@@ -880,7 +883,8 @@
       }
 
       update() {
-        if (this.gameOver || isMatchOver || matchState !== 'playing') return;
+        if (this.gameOver && !this.isPractice) return;
+        if (matchState !== 'playing' && !this.isPractice) return;
 
         let needsMatchCheck = false;
         let isMoving = false;
@@ -1256,6 +1260,19 @@
           });
 
           if (chainActive) this.chain++; else this.chain = 1;
+
+          if (this.chain >= 2) {
+             if (!this.popups) this.popups = [];
+             const coords = Array.from(matchedPositions)[0].split(',').map(Number);
+             this.popups.push({
+               text: `${this.chain}comb`,
+               x: coords[1] * CELL_PX + CELL_PX / 2,
+               y: coords[0] * CELL_PX,
+               timer: 45,
+               initialTimer: 45
+             });
+          }
+
           this.stopTimer = 50 + (matchedPositions.size * 10) + (this.chain * 10);
           this.score += matchedPositions.size * 10 * this.chain;
 
@@ -1394,7 +1411,29 @@
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
         ctx.strokeRect(engine.cursor.x * CELL_PX - 2, engine.cursor.y * CELL_PX - offsetY - 2, CELL_PX * 2 + 4, CELL_PX + 4);
 
-        if (engine.gameOver) {
+        if (engine.popups) {
+          for (let i = engine.popups.length - 1; i >= 0; i--) {
+            const p = engine.popups[i];
+            p.timer--;
+            if (p.timer <= 0) {
+              engine.popups.splice(i, 1);
+              continue;
+            }
+            const progress = 1 - p.timer / p.initialTimer;
+            const floatY = progress * 24;
+            ctx.globalAlpha = Math.max(0, p.timer / 15); 
+            ctx.fillStyle = '#ffdf00'; 
+            ctx.font = 'bold 22px sans-serif'; 
+            ctx.textAlign = 'center';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#e94560'; 
+            ctx.strokeText(p.text, p.x, p.y - offsetY - floatY);
+            ctx.fillText(p.text, p.x, p.y - offsetY - floatY);
+            ctx.globalAlpha = 1.0;
+          }
+        }
+
+        if (engine.gameOver && !engine.isPractice) {
           ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
           ctx.fillStyle = '#ff3366'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('GAME OVER', this.canvas.width/2, this.canvas.height/2);
         }
@@ -1413,7 +1452,7 @@
         this.engine.riseSpeed = 0.0010 + (level * 0.0002); 
       }
       update() {
-        if (this.engine.gameOver || isMatchOver || matchState !== 'playing') return;
+        if (this.engine.gameOver || matchState !== 'playing') return;
         
         let maxH = 0;
         for (let c=0; c<COLS; c++) { 
@@ -1440,7 +1479,7 @@
         }
       }
       think() {
-        if (this.engine.gameOver || isMatchOver || matchState !== 'playing') return;
+        if (this.engine.gameOver || matchState !== 'playing') return;
         this.actionTimer = this.thinkInterval;
         this.engine.isRisingManualPad = false;
 
@@ -1536,6 +1575,8 @@
     let matchState = 'ready'; // 'ready', 'playing', 'gameover'
     let currentMatchId = 0;
     let countdownTimer = null;
+    let hostDisconnected = false;
+    let isPracticeMode = false;
 
     function showToast(msg) { 
       const t = document.getElementById('toast'); 
@@ -1546,7 +1587,7 @@
     function backToMainMenu() { document.getElementById('com-menu').style.display = 'none'; document.getElementById('main-menu-actions').style.display = 'flex'; }
 
     function selectTarget(index) {
-      if (isMatchOver) return;
+      if (isMatchOver && !isPracticeMode) return;
       if (myTargetIndex === index) {
         myTargetIndex = -1;
       } else {
@@ -1559,7 +1600,7 @@
     }
 
     function cycleTarget() {
-      if (isMatchOver || opponents.length <= 0) return;
+      if ((isMatchOver && !isPracticeMode) || opponents.length <= 0) return;
       let next = myTargetIndex + 1;
       while (next < opponents.length) {
         if (!opponents[next].engine.gameOver) {
@@ -1589,7 +1630,7 @@
     }
 
     function distributeGarbage(senderId, totalBlocks, isHard) {
-      if (isMatchOver) return;
+      if (isMatchOver && !isPracticeMode) return;
       if (currentMode.startsWith('online')) {
         distributeGarbageOnline(senderId, totalBlocks, isHard);
         return;
@@ -1600,7 +1641,7 @@
         candidateOpponents = opponents.filter(o => !o.engine.gameOver);
       } else {
         candidateOpponents = [];
-        if (!myEngine.gameOver) candidateOpponents.push({ id: 'player', engine: myEngine });
+        if (!myEngine.gameOver && !isPracticeMode) candidateOpponents.push({ id: 'player', engine: myEngine });
         opponents.forEach(o => {
           if (o.id !== senderId && !o.engine.gameOver) candidateOpponents.push(o);
         });
@@ -1636,13 +1677,11 @@
     }
 
     function distributeGarbageOnline(senderId, totalBlocks, isHard) {
-      if (isMatchOver) return;
-
       let candidateOpponents = [];
       if (senderId === myOnlineId) {
         candidateOpponents = opponents.filter(o => !o.engine.gameOver);
       } else {
-        if (!myEngine.gameOver) candidateOpponents.push({ id: myOnlineId, engine: myEngine });
+        if (!myEngine.gameOver && !isPracticeMode) candidateOpponents.push({ id: myOnlineId, engine: myEngine });
         opponents.forEach(o => {
           if (o.id !== senderId && !o.engine.gameOver) candidateOpponents.push(o);
         });
@@ -1676,7 +1715,7 @@
       if (myOnlineId === 'host') {
         for (const [tId, count] of Object.entries(targetsDict)) {
           if (tId === 'host') {
-            sendBlocksToOpponent({ engine: myEngine }, count, isHard);
+            if (!isPracticeMode) sendBlocksToOpponent({ engine: myEngine }, count, isHard);
           } else {
             const opp = opponents.find(o => o.id === tId);
             if (opp && opp.type === 'com') {
@@ -1716,40 +1755,94 @@
     }
 
     function requestRematch() {
+      if (hostDisconnected) {
+         exitGame();
+         return;
+      }
       if (currentMode === 'single' || currentMode === 'com') {
         startGame(currentMode, currentComLevel, currentTotalPlayers);
       } else if (currentMode.startsWith('online')) {
         onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'rematch_req' }); });
+        
         if (myOnlineId === 'host') {
-          onlineConnections.forEach(c => {
-            const config = { players: matchPlayersConfig, myId: matchPlayersConfig.find(p=>p.conn===c)?.id || 'unknown', matchId: Date.now() };
-            if(c.open) c.send({ type: 'start_match', config });
-          });
-          startGameWithConfig({ players: matchPlayersConfig, myId: 'host', matchId: Date.now() });
+          const alive = opponents.filter(o => !o.engine.gameOver);
+          if (alive.length > 0) {
+             showToast('他プレイヤーの終了を待っています...');
+             document.getElementById('result-rematch-btn').disabled = true;
+             startPracticeMode();
+          } else {
+             startMatchFromHost();
+          }
         } else {
           showToast('ホストの再戦開始を待っています...');
           document.getElementById('result-rematch-btn').disabled = true;
+          startPracticeMode();
         }
       }
     }
 
-    function checkMatchEnd() {
-      if (isMatchOver) return;
+    function startMatchFromHost() {
+       onlineConnections.forEach(c => {
+         const config = { players: matchPlayersConfig, myId: matchPlayersConfig.find(p=>p.conn===c)?.id || 'unknown', matchId: Date.now() };
+         if(c.open) c.send({ type: 'start_match', config });
+       });
+       startGameWithConfig({ players: matchPlayersConfig, myId: 'host', matchId: Date.now() });
+    }
 
-      if (myEngine && myEngine.gameOver) {
-        isMatchOver = true;
-        matchState = 'gameover';
-        stopAllEngines();
-        showResultModal("LOSE...");
-        return;
-      }
+    function startPracticeMode() {
+       isPracticeMode = true;
+       document.getElementById('result-overlay').style.display = 'none';
+       
+       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
+       myEngine = new PonEngine(null, null, handicap, true);
+       myEngine.isPractice = true;
+       myEngine.garbageQueue = [];
+       myEngine.onSendGarbage = null; 
+       myEngine.onStateChange = (state) => {
+         if (state === 'gameover') {
+            myEngine = new PonEngine(null, null, handicap, true);
+            myEngine.isPractice = true;
+            myEngine.onSendGarbage = null;
+         }
+       };
+    }
+
+    function checkMatchEnd() {
+      if (matchState === 'gameover') return;
 
       const aliveOpponents = opponents.filter(o => !o.engine.gameOver);
-      if (opponents.length > 0 && aliveOpponents.length === 0) {
+
+      if (myEngine && myEngine.gameOver && !isMatchOver && !isPracticeMode) {
         isMatchOver = true;
-        matchState = 'gameover';
-        stopAllEngines();
-        showResultModal("WIN!!");
+        if (currentMode === 'single') {
+           matchState = 'gameover';
+           stopAllEngines();
+           showResultModal("GAME OVER");
+        } else {
+           if (currentMode === 'com') stopAllEngines();
+           showResultModal("LOSE...");
+        }
+      }
+
+      if (isMatchOver) {
+         if (aliveOpponents.length === 0) {
+            matchState = 'gameover';
+            if (hostDisconnected) {
+               setTimeout(() => { showToast("ホストが退出済みのため解散します。"); exitGame(); }, 3000);
+            } else if (myOnlineId === 'host' && isPracticeMode) {
+               startMatchFromHost();
+            }
+         }
+      } else {
+         if (opponents.length > 0 && aliveOpponents.length === 0) {
+            isMatchOver = true;
+            matchState = 'gameover';
+            stopAllEngines();
+            showResultModal("WIN!!");
+            if (hostDisconnected) {
+               setTimeout(() => { showToast("ホストが退出済みのため解散します。"); exitGame(); }, 3000);
+            }
+         }
       }
     }
 
@@ -1759,6 +1852,7 @@
         myEngine.isRisingManualKey = false;
         myEngine.isRisingManualPad = false;
         myEngine.riseSpeed = 0;
+        myEngine.gameOver = true;
       }
       opponents.forEach(opp => {
         if (opp.engine) {
@@ -1876,6 +1970,7 @@
       currentComLevel = level;
       currentTotalPlayers = totalPlayers;
       matchState = 'ready';
+      isPracticeMode = false;
       
       document.getElementById('menu-overlay').style.display = 'none';
       document.getElementById('game-area').style.display = 'flex';
@@ -1894,6 +1989,7 @@
 
     function resetGameLogic() {
       isMatchOver = false;
+      isPracticeMode = false;
       myTargetIndex = -1;
       currentMatchId = Date.now(); 
       
@@ -1986,13 +2082,15 @@
     }
 
     function exitGame() {
-      if (myEngine && !myEngine.gameOver && currentMode !== 'single' && !isMatchOver) {
+      if (myEngine && !myEngine.gameOver && currentMode !== 'single' && !isMatchOver && !isPracticeMode) {
         if (!confirm("退出してメニューに戻りますか？\n（対戦時は負けになります）")) return;
-        onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'leave' }); });
+        onlineConnections.forEach(c => { if(c && c.open) c.send({ type: 'leave', senderId: myOnlineId }); });
       }
       
       isMatchOver = true;
       matchState = 'gameover';
+      isPracticeMode = false;
+      hostDisconnected = false;
       stopAllEngines();
       stopBgm();
       
@@ -2028,7 +2126,7 @@
       pad.buttons.forEach((b, i) => padState[i] = b.pressed);
       const justPressed = (btnIdx) => padState[btnIdx] && !prevPadState[btnIdx];
 
-      if (!myEngine || myEngine.gameOver || isMatchOver) return;
+      if (!myEngine || (isMatchOver && !isPracticeMode)) return;
 
       let moved = false;
       if (padConfig.Up !== null && justPressed(padConfig.Up) && myEngine.cursor.y > 0) { myEngine.cursor.y--; moved = true; }
@@ -2073,12 +2171,14 @@
       accumulator += deltaTime;
       
       while (accumulator >= FIXED_TIME_STEP) {
-        if (!isMatchOver) {
+        if (!isMatchOver || isPracticeMode) {
           pollGamepadInput();
           if (myEngine) myEngine.update();
+        }
+        if (!isMatchOver || isPracticeMode) {
           opponents.forEach(opp => {
             if (opp.ai) opp.ai.update();
-            if (opp.engine) opp.engine.update();
+            if (opp.engine && !opp.engine.gameOver) opp.engine.update();
           });
           checkPanic(); 
         }
@@ -2111,7 +2211,7 @@
       let isDown = false, grabbedCol = -1, grabbedRow = -1, initialCanvasX = 0, initialCanvasY = 0;
 
       cvs.addEventListener('pointerdown', (e) => {
-        if (isMatchOver) return;
+        if (isMatchOver && !isPracticeMode) return;
         isDown = true; cvs.setPointerCapture(e.pointerId);
         const rect = cvs.getBoundingClientRect();
         const scaleX = cvs.width / rect.width, scaleY = cvs.height / rect.height;
@@ -2122,7 +2222,7 @@
       });
 
       cvs.addEventListener('pointermove', (e) => {
-        if (!isDown || !myEngine || isMatchOver) return;
+        if (!isDown || !myEngine || (isMatchOver && !isPracticeMode)) return;
         const rect = cvs.getBoundingClientRect();
         const canvasX = (e.clientX - rect.left) * (cvs.width / rect.width);
         let targetCol = Math.max(0, Math.min(COLS - 1, Math.floor(canvasX / CELL_PX)));
@@ -2149,7 +2249,7 @@
       cvs.addEventListener('pointerup', (e) => {
         if (!isDown) return;
         isDown = false; cvs.releasePointerCapture(e.pointerId);
-        if (isMatchOver) return;
+        if (isMatchOver && !isPracticeMode) return;
         const rect = cvs.getBoundingClientRect();
         const canvasX = (e.clientX - rect.left) * (cvs.width / rect.width);
         const canvasY = (e.clientY - rect.top) * (cvs.height / rect.height);
@@ -2171,7 +2271,7 @@
       const riseBtn = document.getElementById('rise-btn');
       riseBtn.addEventListener('pointerdown', (e) => { 
         e.preventDefault(); 
-        if(myEngine && !isMatchOver) myEngine.isRisingManualBtn = true; 
+        if(myEngine && !(isMatchOver && !isPracticeMode)) myEngine.isRisingManualBtn = true; 
       });
       ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => {
         riseBtn.addEventListener(ev, () => { if(myEngine) myEngine.isRisingManualBtn = false; });
@@ -2185,7 +2285,7 @@
           renderConfigUI();
           return;
         }
-        if (!myEngine || myEngine.gameOver || isMatchOver) return;
+        if (!myEngine || (isMatchOver && !isPracticeMode)) return;
         const code = e.code;
         let moved = false;
         
@@ -2242,7 +2342,6 @@
       });
 
       peer.on('connection', (c) => {
-        // コネクションが完全に確立（open）するまで待ってから人数に加算
         c.on('open', () => {
           if (onlineConnections.length >= maxPlayers - 1) {
             c.close(); return;
@@ -2366,6 +2465,7 @@
       myOnlineId = config.myId;
       matchPlayersConfig = config.players;
       matchState = 'ready';
+      isPracticeMode = false;
 
       document.getElementById('menu-overlay').style.display = 'none';
       document.getElementById('game-area').style.display = 'flex';
@@ -2386,19 +2486,13 @@
 
     function resetGameLogicOnline(config) {
       isMatchOver = false;
+      isPracticeMode = false;
       myTargetIndex = -1;
       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
 
       myRenderer = new BoardRenderer('my-canvas');
       myEngine = new PonEngine(
-        (state) => { 
-          if (state === 'gameover') {
-            onlineConnections.forEach(c => {
-              if (c && c.open) c.send({ type: 'gameover', senderId: myOnlineId });
-            });
-            checkMatchEnd(); 
-          }
-        },
+        (state) => { if (state === 'gameover') checkMatchEnd(); },
         (totalBlocks, isHard) => { distributeGarbageOnline(myOnlineId, totalBlocks, isHard); },
         handicap,
         true
@@ -2442,14 +2536,7 @@
 
         if (p.type === 'com' && myOnlineId === 'host') {
           rEngine = new PonEngine(
-            (state) => { 
-              if (state === 'gameover') {
-                onlineConnections.forEach(c => {
-                  if (c && c.open) c.send({ type: 'gameover', senderId: p.id });
-                });
-                checkMatchEnd(); 
-              }
-            },
+            (state) => { if (state === 'gameover') checkMatchEnd(); },
             (totalBlocks, isHard) => { distributeGarbageOnline(p.id, totalBlocks, isHard); },
             3,
             false
@@ -2483,13 +2570,14 @@
       if (syncIntervalId) clearInterval(syncIntervalId);
       syncIntervalId = setInterval(() => {
         if (myEngine && !isMatchOver) {
-          const syncData = { 
-            type: 'sync', senderId: myOnlineId, grid: myEngine.grid, nextRow: myEngine.nextRow, 
-            riseOffset: myEngine.riseOffset, score: myEngine.score, 
-            garbageQueue: myEngine.garbageQueue,
-            gameOver: myEngine.gameOver
-          };
-          onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
+          if (!isPracticeMode) {
+             const syncData = { 
+               type: 'sync', senderId: myOnlineId, grid: myEngine.grid, nextRow: myEngine.nextRow, 
+               riseOffset: myEngine.riseOffset, score: myEngine.score, 
+               garbageQueue: myEngine.garbageQueue, gameOver: myEngine.gameOver
+             };
+             onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
+          }
 
           if (myOnlineId === 'host') {
             opponents.forEach(opp => {
@@ -2497,8 +2585,7 @@
                 const comSyncData = {
                   type: 'sync', senderId: opp.id, grid: opp.engine.grid, nextRow: opp.engine.nextRow, 
                   riseOffset: opp.engine.riseOffset, score: opp.engine.score, 
-                  garbageQueue: opp.engine.garbageQueue,
-                  gameOver: opp.engine.gameOver
+                  garbageQueue: opp.engine.garbageQueue, gameOver: opp.engine.gameOver
                 };
                 onlineConnections.forEach(c => { if (c && c.open) c.send(comSyncData); });
               }
@@ -2508,19 +2595,42 @@
       }, 100);
     }
 
+    function replaceClientWithCom(leftId) {
+       const opp = opponents.find(o => o.id === leftId);
+       if (opp && opp.type !== 'com') {
+          opp.type = 'com';
+          opp.name = opp.name + ' (COM)';
+          
+          if (!opp.engine.gameOver) {
+             opp.engine.onStateChange = (state) => { if (state === 'gameover') checkMatchEnd(); };
+             opp.engine.onSendGarbage = (totalBlocks, isHard) => { distributeGarbageOnline(opp.id, totalBlocks, isHard); };
+             opp.ai = new ComAI(opp.engine, currentComLevel, opp.id);
+             showToast(`${opp.name} が退出したためCOMが代役に入りました。`);
+          }
+          
+          const configP = matchPlayersConfig.find(p => p.id === leftId);
+          if (configP) {
+             configP.type = 'com';
+             configP.level = currentComLevel;
+             configP.name = opp.name;
+          }
+       }
+    }
+
     function bindConnEvents(c, isHostMode) {
       c.on('data', (data) => {
         if (data.type === 'sync') {
           const senderOpp = opponents.find(o => o.id === data.senderId);
-          if (senderOpp && senderOpp.engine && !isMatchOver) {
+          if (senderOpp && senderOpp.engine) {
             senderOpp.engine.grid = data.grid;
             senderOpp.engine.nextRow = data.nextRow;
             senderOpp.engine.riseOffset = data.riseOffset;
             senderOpp.engine.score = data.score;
             if (data.garbageQueue) senderOpp.engine.garbageQueue = data.garbageQueue;
-            if (data.gameOver !== undefined) {
-              senderOpp.engine.gameOver = data.gameOver;
-              if (data.gameOver) checkMatchEnd();
+
+            if (data.gameOver && !senderOpp.engine.gameOver) {
+               senderOpp.engine.gameOver = true;
+               checkMatchEnd();
             }
           }
           if (isHostMode) {
@@ -2529,25 +2639,13 @@
             });
           }
         } 
-        else if (data.type === 'gameover') {
-          const senderOpp = opponents.find(o => o.id === data.senderId);
-          if (senderOpp && senderOpp.engine) {
-            senderOpp.engine.gameOver = true;
-            checkMatchEnd();
-          }
-          if (isHostMode) {
-            onlineConnections.forEach(otherC => {
-              if (otherC !== c && otherC.open) otherC.send(data);
-            });
-          }
-        }
         else if (data.type === 'start_countdown') {
           startCountdown();
         }
         else if (data.type === 'garbage_request' && isHostMode) {
           for (const [tId, count] of Object.entries(data.targets)) {
             if (tId === 'host') {
-              sendBlocksToOpponent({ engine: myEngine }, count, data.isHard);
+              if (!isPracticeMode) sendBlocksToOpponent({ engine: myEngine }, count, data.isHard);
             } else {
               const opp = opponents.find(o => o.id === tId);
               if (opp && opp.type === 'com') sendBlocksToOpponent(opp, count, data.isHard);
@@ -2558,7 +2656,7 @@
           });
         }
         else if (data.type === 'add_garbage_multi') {
-          if (data.targets[myOnlineId]) {
+          if (data.targets[myOnlineId] && !isPracticeMode) {
             sendBlocksToOpponent({ engine: myEngine }, data.targets[myOnlineId], data.isHard);
           }
         }
@@ -2566,28 +2664,76 @@
           startGameWithConfig(data.config);
         }
         else if (data.type === 'rematch_req') {
-          if (isHostMode) {
-            // ホスト側は受け取って何もしない(ホスト自身のリザルトUI操作が主導)
-          }
+          // ホスト主導で処理するため受動的
         }
         else if (data.type === 'leave') {
-          const senderOpp = opponents.find(o => (data.senderId && o.id === data.senderId) || (isHostMode && o.id !== 'host'));
-          if (senderOpp && senderOpp.engine) {
-            senderOpp.engine.gameOver = true;
-            checkMatchEnd();
+          if (isHostMode) {
+            replaceClientWithCom(data.senderId);
+          } else {
+            if (data.senderId === 'host') {
+               if (!isMatchOver) {
+                 hostDisconnected = true;
+                 showToast("ホストとの接続が切れました。試合終了後に退出します。");
+                 opponents.forEach(opp => {
+                   if (opp.type !== 'com' && !opp.engine.gameOver) {
+                     opp.type = 'com';
+                     opp.name = opp.name + ' (COM)';
+                     opp.engine.onStateChange = (state) => { if (state === 'gameover') checkMatchEnd(); };
+                     opp.engine.onSendGarbage = () => {}; 
+                     opp.ai = new ComAI(opp.engine, currentComLevel, opp.id);
+                   } else if (opp.type === 'com' && !opp.engine.gameOver) {
+                     opp.ai = new ComAI(opp.engine, opp.level || currentComLevel, opp.id);
+                     opp.engine.onSendGarbage = () => {}; 
+                   }
+                 });
+               } else {
+                 if (currentMode === 'online') {
+                    showToast("ホストが退出したため解散します。");
+                    setTimeout(() => exitGame(), 2000);
+                 }
+               }
+            } else {
+               const senderOpp = opponents.find(o => o.id === data.senderId);
+               if (senderOpp && senderOpp.type !== 'com') {
+                  senderOpp.type = 'com';
+                  senderOpp.name += ' (COM)';
+                  if (!senderOpp.engine.gameOver) {
+                     senderOpp.engine.onStateChange = (state) => { if (state === 'gameover') checkMatchEnd(); };
+                     senderOpp.engine.onSendGarbage = () => {};
+                  }
+               }
+            }
           }
         }
       });
       c.on('close', () => {
-        // 切断時
         if (isHostMode) {
           const index = onlineConnections.indexOf(c);
           if (index !== -1) {
-             const leftId = `client_${index}`;
-             const opp = opponents.find(o => o.id === leftId);
-             if (opp && opp.engine) {
-               opp.engine.gameOver = true;
-               checkMatchEnd();
+             const leftId = matchPlayersConfig.find(p=>p.conn===c)?.id || `client_${index}`;
+             replaceClientWithCom(leftId);
+             onlineConnections.splice(index, 1);
+          }
+        } else {
+          if (!isMatchOver) {
+             hostDisconnected = true;
+             showToast("ホストとの接続が切れました。試合終了後に退出します。");
+             opponents.forEach(opp => {
+               if (opp.type !== 'com' && !opp.engine.gameOver) {
+                 opp.type = 'com';
+                 opp.name = opp.name + ' (COM)';
+                 opp.engine.onStateChange = (state) => { if (state === 'gameover') checkMatchEnd(); };
+                 opp.engine.onSendGarbage = () => {}; 
+                 opp.ai = new ComAI(opp.engine, currentComLevel, opp.id);
+               } else if (opp.type === 'com' && !opp.engine.gameOver) {
+                 opp.ai = new ComAI(opp.engine, opp.level || currentComLevel, opp.id);
+                 opp.engine.onSendGarbage = () => {}; 
+               }
+             });
+          } else {
+             if (currentMode === 'online') {
+                showToast("ホストが退出したため解散します。");
+                setTimeout(() => exitGame(), 2000);
              }
           }
         }
