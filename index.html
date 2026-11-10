@@ -184,7 +184,7 @@
           <option value="1">1: 不利 (激ムズ)</option>
           <option value="2">2: やや不利</option>
           <option value="3" selected>3: 普通</option>
-          <option value="4">4: やや有利</option>
+          <option value="4">4: や平有利</option>
           <option value="5">5: 有利 (やさしい)</option>
         </select>
       </div>
@@ -334,27 +334,25 @@
     };
     SE.load();
 
-    // BGM用Audio。ラグなし切り替えのため2つのインスタンスを用意
     let bgmAudio = new Audio();
     let panicBgmAudio = new Audio('assets/bgm/panic00.m4a');
     panicBgmAudio.loop = true;
 
     let bgmPlaylist = [], currentBgmIndex = 0, isBgmPlaying = false, bgmNeedsPlay = false;
     let isBgmIntendedToPlay = false; 
-    let isPanic = false, mainBgmTime = 0;
+    let isPanic = false;
 
     const savedSeVol = localStorage.getItem('pdw_se_vol');
     if (savedSeVol !== null) SE.volume = parseFloat(savedSeVol);
     const savedBgmVol = localStorage.getItem('pdw_bgm_vol');
-    if (savedBgmVol !== null) {
-      bgmAudio.volume = parseFloat(savedBgmVol);
-      panicBgmAudio.volume = parseFloat(savedBgmVol);
-    }
+    let initBgmVol = savedBgmVol !== null ? parseFloat(savedBgmVol) : 0.5;
+    bgmAudio.volume = initBgmVol;
+    panicBgmAudio.volume = 0; // isPanic is initially false
 
     document.getElementById('se-volume').value = SE.volume;
     document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
-    document.getElementById('bgm-volume').value = bgmAudio.volume;
-    document.getElementById('bgm-volume-val').innerText = Math.floor(bgmAudio.volume * 100);
+    document.getElementById('bgm-volume').value = initBgmVol;
+    document.getElementById('bgm-volume-val').innerText = Math.floor(initBgmVol * 100);
 
     document.getElementById('se-volume').addEventListener('input', (e) => {
       SE.volume = parseFloat(e.target.value);
@@ -363,8 +361,13 @@
     });
     document.getElementById('bgm-volume').addEventListener('input', (e) => {
       const vol = parseFloat(e.target.value);
-      bgmAudio.volume = vol;
-      panicBgmAudio.volume = vol;
+      if (isPanic) {
+        bgmAudio.volume = 0;
+        panicBgmAudio.volume = vol;
+      } else {
+        bgmAudio.volume = vol;
+        panicBgmAudio.volume = 0;
+      }
       document.getElementById('bgm-volume-val').innerText = Math.floor(vol * 100);
       localStorage.setItem('pdw_bgm_vol', vol);
     });
@@ -395,7 +398,13 @@
            bgmAudio._currentFile = expectedFile;
         }
         bgmAudio.loop = false;
+        
+        let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
+        bgmAudio.volume = isPanic ? 0 : bgmVol;
+        panicBgmAudio.volume = isPanic ? bgmVol : 0;
+
         bgmAudio.play().then(() => { 
+          panicBgmAudio.play().catch(()=>{});
           isBgmPlaying = true; 
           isBgmIntendedToPlay = true;
           bgmNeedsPlay = false; 
@@ -412,9 +421,8 @@
           bgmAudio._currentFile = expectedFile;
         }
         bgmAudio.loop = false;
-        mainBgmTime = 0;
 
-        if (isBgmIntendedToPlay && !isPanic) {
+        if (isBgmIntendedToPlay) {
           bgmAudio.currentTime = 0;
           bgmAudio.play().catch(()=>{});
         }
@@ -423,9 +431,9 @@
 
     function stopBgm() {
       isBgmIntendedToPlay = false;
+      isBgmPlaying = false;
       bgmAudio.pause();
       panicBgmAudio.pause();
-      isBgmPlaying = false;
     }
 
     function readyBgm() {
@@ -449,48 +457,47 @@
       panicBgmAudio.load();
       bgmAudio.currentTime = 0;
       panicBgmAudio.currentTime = 0;
-      mainBgmTime = 0;
       isPanic = false;
       
-      bgmAudio.muted = true;
-      panicBgmAudio.muted = true;
+      let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
+      bgmAudio.volume = 0; 
+      panicBgmAudio.volume = 0;
       
       const p1 = bgmAudio.play();
       if (p1 !== undefined) {
         p1.then(() => {
-          bgmAudio.muted = false;
-          if (!isBgmIntendedToPlay || isPanic) {
+          if (!isBgmIntendedToPlay) {
             bgmAudio.pause();
-            if (!isBgmIntendedToPlay) bgmAudio.currentTime = 0;
+            bgmAudio.currentTime = 0;
+          } else {
+            bgmAudio.volume = isPanic ? 0 : bgmVol;
           }
-        }).catch(e => { bgmAudio.muted = false; });
+        }).catch(e => console.warn(e));
       }
 
       const p2 = panicBgmAudio.play();
       if (p2 !== undefined) {
         p2.then(() => {
-          panicBgmAudio.muted = false;
-          if (!isBgmIntendedToPlay || !isPanic) {
+          if (!isBgmIntendedToPlay) {
             panicBgmAudio.pause();
-            if (!isBgmIntendedToPlay) panicBgmAudio.currentTime = 0;
+            panicBgmAudio.currentTime = 0;
+          } else {
+            panicBgmAudio.volume = isPanic ? bgmVol : 0;
           }
-        }).catch(e => { panicBgmAudio.muted = false; });
+        }).catch(e => console.warn(e));
       }
     }
 
     function resumeBgm() {
       isBgmIntendedToPlay = true;
       isBgmPlaying = true;
-      bgmAudio.muted = false;
-      panicBgmAudio.muted = false;
+      let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
 
-      if (isPanic) {
-        bgmAudio.pause();
-        panicBgmAudio.play().catch(e => console.warn(e));
-      } else {
-        panicBgmAudio.pause();
-        bgmAudio.play().catch(e => console.warn(e));
-      }
+      bgmAudio.volume = isPanic ? 0 : bgmVol;
+      panicBgmAudio.volume = isPanic ? bgmVol : 0;
+
+      bgmAudio.play().catch(e => console.warn(e));
+      panicBgmAudio.play().catch(e => console.warn(e));
     }
 
     // --- コンフィグ管理 ---
@@ -523,7 +530,13 @@
         }
         bgmAudio.loop = false;
         bgmAudio.currentTime = 0;
-        bgmAudio.play().then(() => { 
+        
+        let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
+        bgmAudio.volume = isPanic ? 0 : bgmVol;
+        panicBgmAudio.volume = isPanic ? bgmVol : 0;
+        
+        bgmAudio.play().then(() => {
+          panicBgmAudio.play().catch(()=>{});
           isBgmPlaying = true; 
           isBgmIntendedToPlay = true;
           bgmNeedsPlay = false; 
@@ -1735,26 +1748,16 @@
     function checkPanic() {
       if (!myEngine || matchState !== 'playing' || isMatchOver) return;
       
-      let isMoving = false;
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          const b = myEngine.grid[r][c];
-          if (b && (b.state === 'fall' || b.state === 'hover' || b.state === 'transforming' || b.state === 'transforming_wait' || b.state === 'transformed_wait' || b.state === 'match')) {
-             isMoving = true; break;
-          }
-        }
-        if (isMoving) break;
-      }
-      
-      if (myEngine.garbageQueue.length > 0) isMoving = true; 
-      if (isMoving) return;
-      
       let panic = false;
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
-          if (myEngine.grid[r][c] !== null) {
-            if ((r - myEngine.riseOffset) <= ROWS * 0.3) {
-              panic = true; break;
+          const b = myEngine.grid[r][c];
+          if (b !== null) {
+            // ブロック落下中等の状態は判定に含めない
+            if (b.state === 'normal') {
+              if ((r - myEngine.riseOffset) <= ROWS * 0.3) {
+                panic = true; break;
+              }
             }
           }
         }
@@ -1772,18 +1775,25 @@
 
     function switchBgmToPanic(toPanic) {
       if (!isBgmIntendedToPlay) return;
+      let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
+      const isCustomBgm = (bgmPlaylist.length > 0);
 
       if (toPanic) {
-        mainBgmTime = bgmAudio.currentTime;
-        bgmAudio.pause();
-        
-        panicBgmAudio.currentTime = 0;
-        panicBgmAudio.play().catch(e => console.warn(e));
+        bgmAudio.volume = 0;
+        panicBgmAudio.volume = bgmVol;
+        if (!isCustomBgm) {
+          if (Math.abs(bgmAudio.currentTime - panicBgmAudio.currentTime) > 0.2) {
+            panicBgmAudio.currentTime = bgmAudio.currentTime;
+          }
+        }
       } else {
-        panicBgmAudio.pause();
-        
-        bgmAudio.currentTime = mainBgmTime;
-        bgmAudio.play().catch(e => console.warn(e));
+        panicBgmAudio.volume = 0;
+        bgmAudio.volume = bgmVol;
+        if (!isCustomBgm) {
+          if (Math.abs(bgmAudio.currentTime - panicBgmAudio.currentTime) > 0.2) {
+            bgmAudio.currentTime = panicBgmAudio.currentTime;
+          }
+        }
       }
     }
 
@@ -2659,14 +2669,14 @@
         gameContainer.style.alignItems = 'center';
         gameContainer.style.justifyContent = 'center';
         gameContainer.style.position = 'absolute';
-        gameContainer.style.top = '50%';
-        gameContainer.style.left = '50%';
-        gameContainer.style.transform = 'translate(-50%, -50%)';
+        gameContainer.style.top = `${maxTopH + 8}px`;
+        gameContainer.style.left = '0';
+        gameContainer.style.transform = 'none';
         gameContainer.style.width = '100vw';
-        gameContainer.style.height = 'auto';
+        gameContainer.style.height = `${H - maxTopH - 8}px`;
         gameContainer.style.padding = '0';
 
-        const maxCenterH = Math.max(100, (H * 0.5 - maxTopH - 10) * 2);
+        const maxCenterH = H - maxTopH - 24;
         let myScale = Math.min(1.0, maxCenterH / 515);
         const contentW = 344;
         if (contentW * myScale > W - 10) myScale = (W - 10) / contentW;
@@ -2710,6 +2720,34 @@
         document.getElementById('handedness-toggle').checked = true;
       }
       toggleHandedness();
+
+      // ゲーム画面中の不意なスクロールやズームを防止
+      const gameAreaEl = document.getElementById('game-area');
+      gameAreaEl.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 1) {
+          e.preventDefault(); // ズーム等を無効化
+        }
+      }, { passive: false });
+
+      gameAreaEl.addEventListener('touchmove', (e) => {
+        const settings = document.getElementById('settings-overlay');
+        if (settings.style.display !== 'block') {
+           e.preventDefault(); 
+        }
+      }, { passive: false });
+      
+      gameAreaEl.addEventListener('gesturestart', (e) => {
+        e.preventDefault();
+      });
+      
+      let lastTouchEnd = 0;
+      gameAreaEl.addEventListener('touchend', (e) => {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+          e.preventDefault();
+        }
+        lastTouchEnd = now;
+      }, { passive: false });
     });
   </script>
 </body>
