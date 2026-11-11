@@ -1796,7 +1796,7 @@
       } else {
         if (rematchReady[myOnlineId]) {
            showToast('他のプレイヤーの再戦同意を待っています...');
-           if (myEngine && myEngine.gameOver && !isPracticeMode) startPracticeMode();
+           if (!isPracticeMode) startPracticeMode();
         }
       }
     }
