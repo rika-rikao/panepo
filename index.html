@@ -352,8 +352,143 @@
     };
     SE.load();
 
-    let bgmAudio = new Audio();
-    let panicBgmAudio = new Audio('assets/bgm/panic00.m4a');
+    // iOS等(WebKit)での音量調整不具合を解消するためのWeb Audio API BGMラッパー
+    class WebAudioBGMPlayer {
+      constructor(ctx, src = '') {
+        this.ctx = ctx;
+        this.gainNode = ctx.createGain();
+        this.gainNode.connect(ctx.destination);
+        this.source = null;
+        this.buffer = null;
+        
+        this._src = src;
+        this._volume = 0.5;
+        this._muted = false;
+        this.loop = false;
+        this._currentFile = null;
+        this.onended = null;
+        
+        this.isPlaying = false;
+        this.startTime = 0;
+        this.pauseTime = 0;
+        this._isManualStop = false;
+      }
+      
+      get src() { return this._src; }
+      set src(value) {
+        if (this._src !== value) {
+          this._src = value;
+          this.pauseTime = 0;
+          this.buffer = null; // 新しいsrcになったらバッファクリア
+        }
+      }
+      
+      get volume() { return this._volume; }
+      set volume(v) {
+        this._volume = v;
+        this.updateGain();
+      }
+      
+      get muted() { return this._muted; }
+      set muted(m) {
+        this._muted = m;
+        this.updateGain();
+      }
+      
+      updateGain() {
+        // GainNodeを使って強制的にWeb Audio経由で音量反映・ミュート制御を行う
+        this.gainNode.gain.value = this._muted ? 0 : this._volume;
+      }
+      
+      get currentTime() {
+        if (this.isPlaying) {
+          let t = this.pauseTime + (this.ctx.currentTime - this.startTime);
+          if (this.buffer && this.loop) return t % this.buffer.duration;
+          if (this.buffer && t >= this.buffer.duration) return this.buffer.duration;
+          return t;
+        }
+        return this.pauseTime;
+      }
+      set currentTime(v) {
+        this.pauseTime = v;
+        if (this.isPlaying) {
+          this.pause();
+          this.play().catch(()=>{});
+        }
+      }
+
+      addEventListener(event, callback) {
+        if (event === 'ended') {
+          this.onended = callback;
+        }
+      }
+      
+      async load() {
+        if (!this._src) return;
+        if (this.buffer) return;
+        try {
+          // File API等で生成されたBlob(ObjectURL)も正常にfetch可能
+          const response = await fetch(this._src);
+          const arrayBuffer = await response.arrayBuffer();
+          this.buffer = await this.ctx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+          console.warn('BGM Load Error:', e);
+          this.buffer = null;
+        }
+      }
+      
+      async play() {
+        if (this.ctx.state === 'suspended') await this.ctx.resume();
+        if (!this.buffer) await this.load();
+        if (!this.buffer) return Promise.resolve();
+        
+        if (this.isPlaying) this.pause();
+        
+        this.source = this.ctx.createBufferSource();
+        this.source.buffer = this.buffer;
+        this.source.loop = this.loop;
+        this.source.connect(this.gainNode);
+        
+        this.source.onended = () => {
+          if (!this._isManualStop) {
+            this.isPlaying = false;
+            this.pauseTime = 0;
+            if (this.onended) this.onended(); // 再生終了でイベント発火（プレイリスト遷移等）
+          }
+        };
+        
+        this._isManualStop = false;
+        this.startTime = this.ctx.currentTime;
+        
+        let offset = this.pauseTime;
+        if (this.buffer && offset >= this.buffer.duration) {
+          offset = 0;
+          this.pauseTime = 0;
+        }
+        
+        this.source.start(0, offset);
+        this.isPlaying = true;
+        this.updateGain();
+        return Promise.resolve();
+      }
+      
+      pause() {
+        if (this.isPlaying && this.source) {
+          this._isManualStop = true;
+          this.source.stop();
+          this.source.disconnect();
+          this.pauseTime += (this.ctx.currentTime - this.startTime);
+          if (this.buffer && this.pauseTime >= this.buffer.duration) {
+             this.pauseTime = 0;
+          }
+          this.source = null;
+          this.isPlaying = false;
+        }
+      }
+    }
+
+    let bgmAudio = new WebAudioBGMPlayer(audioCtx);
+    let panicBgmAudio = new WebAudioBGMPlayer(audioCtx, 'assets/bgm/panic00.m4a');
     panicBgmAudio.loop = true;
 
     let bgmPlaylist = [], currentBgmIndex = 0, isBgmPlaying = false, bgmNeedsPlay = false;
@@ -375,15 +510,13 @@
     document.getElementById('bgm-volume').value = initBgmVol;
     document.getElementById('bgm-volume-val').innerText = Math.floor(initBgmVol * 100);
 
-    const updateSeVolume = (e) => {
+    document.getElementById('se-volume').addEventListener('input', (e) => {
       SE.volume = parseFloat(e.target.value);
       document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
       localStorage.setItem('pdw_se_vol', SE.volume);
-    };
-    document.getElementById('se-volume').addEventListener('input', updateSeVolume);
-    document.getElementById('se-volume').addEventListener('change', updateSeVolume);
+    });
     
-    const updateBgmVolume = (e) => {
+    document.getElementById('bgm-volume').addEventListener('input', (e) => {
       const vol = parseFloat(e.target.value);
       bgmAudio.volume = vol;
       panicBgmAudio.volume = vol;
@@ -397,9 +530,7 @@
       }
       document.getElementById('bgm-volume-val').innerText = Math.floor(vol * 100);
       localStorage.setItem('pdw_bgm_vol', vol);
-    };
-    document.getElementById('bgm-volume').addEventListener('input', updateBgmVolume);
-    document.getElementById('bgm-volume').addEventListener('change', updateBgmVolume);
+    });
 
     function handleBgmFiles(files) {
       const arr = Array.from(files).filter(f => f.type.startsWith('audio/'));
