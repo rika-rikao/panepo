@@ -353,77 +353,49 @@
     SE.load();
 
     let bgmAudio = new Audio();
-    bgmAudio.crossOrigin = "anonymous";
     let panicBgmAudio = new Audio('assets/bgm/panic00.m4a');
-    panicBgmAudio.crossOrigin = "anonymous";
     panicBgmAudio.loop = true;
-
-    // Web Audio API ルーティング (iOS等でのBGM音量制御用)
-    let bgmGainNode = null;
-    let panicGainNode = null;
-    try {
-      bgmGainNode = audioCtx.createGain();
-      panicGainNode = audioCtx.createGain();
-      const bgmSource = audioCtx.createMediaElementSource(bgmAudio);
-      const panicSource = audioCtx.createMediaElementSource(panicBgmAudio);
-      bgmSource.connect(bgmGainNode);
-      bgmGainNode.connect(audioCtx.destination);
-      panicSource.connect(panicGainNode);
-      panicGainNode.connect(audioCtx.destination);
-    } catch (e) {
-      console.warn('Web Audio API Routing Error:', e);
-      bgmGainNode = null;
-      panicGainNode = null;
-    }
 
     let bgmPlaylist = [], currentBgmIndex = 0, isBgmPlaying = false, bgmNeedsPlay = false;
     let isBgmIntendedToPlay = false; 
     let isPanic = false;
 
-    function updateBgmVolumeAndMute() {
-      let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
-      bgmAudio.volume = bgmVol;
-      panicBgmAudio.volume = bgmVol;
-
-      if (bgmGainNode && panicGainNode) {
-        bgmGainNode.gain.value = isPanic ? 0 : bgmVol;
-        panicGainNode.gain.value = isPanic ? bgmVol : 0;
-        bgmAudio.muted = false;
-        panicBgmAudio.muted = false;
-      } else {
-        bgmAudio.muted = isPanic;
-        panicBgmAudio.muted = !isPanic;
-      }
-    }
-
     const savedSeVol = localStorage.getItem('pdw_se_vol');
     if (savedSeVol !== null) SE.volume = parseFloat(savedSeVol);
     const savedBgmVol = localStorage.getItem('pdw_bgm_vol');
     let initBgmVol = savedBgmVol !== null ? parseFloat(savedBgmVol) : 0.5;
+    
+    bgmAudio.volume = initBgmVol;
+    bgmAudio.muted = false;
+    panicBgmAudio.volume = initBgmVol; 
+    panicBgmAudio.muted = true; 
 
     document.getElementById('se-volume').value = SE.volume;
     document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
     document.getElementById('bgm-volume').value = initBgmVol;
     document.getElementById('bgm-volume-val').innerText = Math.floor(initBgmVol * 100);
 
-    updateBgmVolumeAndMute();
-
-    const handleSeVolChange = (e) => {
+    document.getElementById('se-volume').addEventListener('input', (e) => {
       SE.volume = parseFloat(e.target.value);
       document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
       localStorage.setItem('pdw_se_vol', SE.volume);
-    };
-    document.getElementById('se-volume').addEventListener('input', handleSeVolChange);
-    document.getElementById('se-volume').addEventListener('change', handleSeVolChange);
+    });
     
-    const handleBgmVolChange = (e) => {
+    document.getElementById('bgm-volume').addEventListener('input', (e) => {
       const vol = parseFloat(e.target.value);
+      bgmAudio.volume = vol;
+      panicBgmAudio.volume = vol;
+      
+      if (isPanic) {
+        bgmAudio.muted = true;
+        panicBgmAudio.muted = false;
+      } else {
+        bgmAudio.muted = false;
+        panicBgmAudio.muted = true;
+      }
       document.getElementById('bgm-volume-val').innerText = Math.floor(vol * 100);
       localStorage.setItem('pdw_bgm_vol', vol);
-      updateBgmVolumeAndMute();
-    };
-    document.getElementById('bgm-volume').addEventListener('input', handleBgmVolChange);
-    document.getElementById('bgm-volume').addEventListener('change', handleBgmVolChange);
+    });
 
     function handleBgmFiles(files) {
       const arr = Array.from(files).filter(f => f.type.startsWith('audio/'));
@@ -452,7 +424,11 @@
         }
         bgmAudio.loop = false;
         
-        updateBgmVolumeAndMute();
+        let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
+        bgmAudio.volume = bgmVol;
+        panicBgmAudio.volume = bgmVol;
+        bgmAudio.muted = isPanic;
+        panicBgmAudio.muted = !isPanic;
 
         bgmAudio.play().then(() => { 
           panicBgmAudio.play().catch(()=>{});
@@ -510,16 +486,11 @@
       panicBgmAudio.currentTime = 0;
       isPanic = false;
       
-      // 一時的に完全にミュートにする（AudioContextのGainNodeを使って安全に）
-      if (bgmGainNode && panicGainNode) {
-        bgmGainNode.gain.value = 0;
-        panicGainNode.gain.value = 0;
-        bgmAudio.muted = false; 
-        panicBgmAudio.muted = false;
-      } else {
-        bgmAudio.muted = true;
-        panicBgmAudio.muted = true;
-      }
+      let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
+      bgmAudio.volume = bgmVol; 
+      panicBgmAudio.volume = bgmVol;
+      bgmAudio.muted = true;
+      panicBgmAudio.muted = true;
       
       const p1 = bgmAudio.play();
       if (p1 !== undefined) {
@@ -528,7 +499,7 @@
             bgmAudio.pause();
             bgmAudio.currentTime = 0;
           } else {
-            updateBgmVolumeAndMute();
+            bgmAudio.muted = isPanic;
           }
         }).catch(e => console.warn(e));
       }
@@ -540,7 +511,7 @@
             panicBgmAudio.pause();
             panicBgmAudio.currentTime = 0;
           } else {
-            updateBgmVolumeAndMute();
+            panicBgmAudio.muted = !isPanic;
           }
         }).catch(e => console.warn(e));
       }
@@ -549,7 +520,12 @@
     function resumeBgm() {
       isBgmIntendedToPlay = true;
       isBgmPlaying = true;
-      updateBgmVolumeAndMute();
+      let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
+
+      bgmAudio.volume = bgmVol;
+      panicBgmAudio.volume = bgmVol;
+      bgmAudio.muted = isPanic;
+      panicBgmAudio.muted = !isPanic;
 
       bgmAudio.play().catch(e => console.warn(e));
       panicBgmAudio.play().catch(e => console.warn(e));
@@ -586,7 +562,11 @@
         bgmAudio.loop = false;
         bgmAudio.currentTime = 0;
         
-        updateBgmVolumeAndMute();
+        let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
+        bgmAudio.volume = bgmVol;
+        panicBgmAudio.volume = bgmVol;
+        bgmAudio.muted = isPanic;
+        panicBgmAudio.muted = !isPanic;
         
         bgmAudio.play().then(() => {
           panicBgmAudio.play().catch(()=>{});
@@ -1685,7 +1665,7 @@
         const targetBlocks = Math.floor(totalBlocks * 0.5);
         const remainingBlocks = totalBlocks * 0.5;
         const othersCount = candidateOpponents.length - 1;
-        const otherEachBlocks = Math.floor(remainingBlocks / contour);
+        const otherEachBlocks = Math.floor(remainingBlocks / othersCount);
 
         candidateOpponents.forEach(opp => {
           const count = (opp.id === targetOppId) ? targetBlocks : otherEachBlocks;
@@ -1990,10 +1970,19 @@
 
     function switchBgmToPanic(toPanic) {
       if (!isBgmIntendedToPlay) return;
+      let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
+
+      bgmAudio.volume = bgmVol;
+      panicBgmAudio.volume = bgmVol;
+
       if (toPanic) {
+        bgmAudio.muted = true;
+        panicBgmAudio.muted = false;
         panicBgmAudio.currentTime = 0; 
+      } else {
+        panicBgmAudio.muted = true;
+        bgmAudio.muted = false;
       }
-      updateBgmVolumeAndMute();
     }
 
     function startGame(mode, level = 1, totalPlayers = 2) {
