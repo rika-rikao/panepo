@@ -1584,7 +1584,7 @@
                   const isHighestCol = isEnginePanic && highestCols.has(c);
                   const time = Date.now();
                   // 通常状態(isHighestColがfalse)の時はバウンスを0にし、ピンチ時は早く少し大きく揺らす
-                  const bounceY = isHighestCol ? Math.sin(time / 20 + c) * 2 : 0;
+                  const bounceY = isHighestCol ? Math.sin(time / 80 + c) * 2 : 0;
 
                   ctx.fillStyle = isFlashing ? '#6c757d' : conf.bg;
                   ctx.beginPath(); ctx.roundRect(x+2, y+2, CELL_PX-4, CELL_PX-4, 8); ctx.fill();
