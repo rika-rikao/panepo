@@ -1418,7 +1418,8 @@
                y: coords[0] * CELL_PX,
                timer: 45,
                initialTimer: 45,
-               color: '#ffdf00'
+               color: '#ffdf00',
+               isNumber: false
              });
           }
           
@@ -1430,7 +1431,8 @@
                y: coords[0] * CELL_PX,
                timer: 45,
                initialTimer: 45,
-               color: '#00d4ff'
+               color: '#00d4ff',
+               isNumber: true
              });
           }
 
@@ -1502,6 +1504,29 @@
 
         const offsetY = engine.riseOffset * CELL_PX;
 
+        let highestR = engine.rows;
+        for (let c = 0; c < engine.cols; c++) {
+          for (let r = 0; r < engine.rows; r++) {
+            if (engine.grid[r][c] !== null && engine.grid[r][c].type !== 'garbage') {
+              if (r < highestR) highestR = r;
+              break;
+            }
+          }
+        }
+        let highestCols = new Set();
+        let isEnginePanic = (highestR - engine.riseOffset) <= (engine.rows * 0.3);
+
+        if (isEnginePanic) {
+           for (let c = 0; c < engine.cols; c++) {
+             for (let r = 0; r < engine.rows; r++) {
+               if (engine.grid[r][c] !== null && engine.grid[r][c].type !== 'garbage') {
+                 if (r === highestR) highestCols.add(c);
+                 break;
+               }
+             }
+           }
+        }
+
         for (let r = 0; r < engine.rows; r++) {
           for (let c = 0; c < engine.cols; c++) {
             const b = engine.grid[r][c];
@@ -1555,6 +1580,11 @@
                 const conf = COLORS.find(item => item.id === b.type);
                 if (conf) {
                   const isFlashing = (b.state === 'match' && Math.floor(b.timer / 4) % 2 === 0);
+                  
+                  const isHighestCol = isEnginePanic && highestCols.has(c);
+                  const time = Date.now();
+                  const bounceY = isHighestCol ? Math.sin(time / 50 + c) * 5 : Math.sin(time / 150 + c) * 1.5;
+
                   ctx.fillStyle = isFlashing ? '#6c757d' : conf.bg;
                   ctx.beginPath(); ctx.roundRect(x+2, y+2, CELL_PX-4, CELL_PX-4, 8); ctx.fill();
                   
@@ -1562,7 +1592,7 @@
                   ctx.font = 'bold 16px sans-serif'; 
                   ctx.textAlign = 'center'; 
                   ctx.textBaseline = 'middle'; 
-                  ctx.fillText(conf.symbol, x+CELL_PX/2, y+CELL_PX/2);
+                  ctx.fillText(conf.symbol, x+CELL_PX/2, y+CELL_PX/2 + bounceY);
                 }
               }
             }
@@ -1604,7 +1634,13 @@
             const floatY = progress * 24;
             ctx.globalAlpha = Math.max(0, p.timer / 15); 
             ctx.fillStyle = p.color || '#ffdf00'; 
-            ctx.font = 'bold 22px sans-serif'; 
+            
+            if (p.isNumber) {
+               ctx.font = 'bold 38px sans-serif';
+            } else {
+               ctx.font = 'bold 22px sans-serif'; 
+            }
+            
             ctx.textAlign = 'center';
             ctx.lineWidth = 3;
             ctx.strokeStyle = '#e94560'; 
@@ -1633,7 +1669,11 @@
         this.actionTimer = this.thinkInterval;
         this.moveTimer = 0;
         this.engine.riseSpeed = 0.0010 + (level * 0.0002); 
+        
+        const patterns = ['small_chain', 'big_chain', 'multi_match', 'survival'];
+        this.pattern = patterns[Math.floor(Math.random() * patterns.length)];
       }
+
       update() {
         if (this.engine.gameOver || matchState !== 'playing') return;
         
@@ -1661,6 +1701,7 @@
           if (this.actionTimer <= 0) this.think();
         }
       }
+
       think() {
         if (this.engine.gameOver || matchState !== 'playing') return;
         this.actionTimer = this.thinkInterval;
@@ -1674,9 +1715,19 @@
         }
 
         let bestMoves = [];
+        let maxScore = -1;
+
         for (let r=0; r<ROWS; r++) {
           for (let c=0; c<COLS-1; c++) {
-            if (this.canSwapAndMatch(r, c)) bestMoves.push({x:c, y:r});
+            let score = this.evaluateMove(r, c);
+            if (score > 0) {
+              if (score > maxScore) {
+                maxScore = score;
+                bestMoves = [{x:c, y:r}];
+              } else if (score === maxScore) {
+                bestMoves.push({x:c, y:r});
+              }
+            }
           }
         }
 
@@ -1685,7 +1736,11 @@
           this.moveTimer = this.moveInterval;
         } else {
           if (this.level >= 3 && maxH <= 5 && this.engine.garbageQueue.length === 0) {
-            this.engine.isRisingManualPad = true;
+            if (this.pattern === 'survival' || this.pattern === 'small_chain') {
+               this.engine.isRisingManualPad = true;
+            } else {
+               this.engine.isRisingManualPad = (Math.random() < 0.5);
+            }
             this.target = null;
           } else { 
             this.engine.isRisingManualPad = false;
@@ -1721,25 +1776,72 @@
           }
         }
       }
-      canSwapAndMatch(r, c) {
+
+      evaluateMove(r, c) {
         const b1 = this.engine.grid[r][c], b2 = this.engine.grid[r][c+1];
-        if (b1 && b1.state !== 'normal') return false;
-        if (b2 && b2.state !== 'normal') return false;
-        if (!b1 && !b2) return false;
-        if (b1 && b2 && b1.type === b2.type) return false;
+        if (b1 && b1.state !== 'normal') return 0;
+        if (b2 && b2.state !== 'normal') return 0;
+        if (!b1 && !b2) return 0;
+        if (b1 && b2 && b1.type === b2.type) return 0;
+
+        let hasMatch = false;
         const temp = this.engine.grid.map(row => row.map(cell => cell ? {...cell} : null));
         let t = temp[r][c]; temp[r][c] = temp[r][c+1]; temp[r][c+1] = t;
+
+        let matchedPositions = new Set();
         for (let rr=0; rr<ROWS; rr++) {
           for (let cc=0; cc<COLS-2; cc++) {
-            if (temp[rr][cc] && temp[rr][cc].type!=='garbage' && temp[rr][cc+1] && temp[rr][cc+2] && temp[rr][cc].type===temp[rr][cc+1].type && temp[rr][cc].type===temp[rr][cc+2].type) return true;
+            if (temp[rr][cc] && temp[rr][cc].type!=='garbage' && temp[rr][cc+1] && temp[rr][cc+2] && temp[rr][cc].type===temp[rr][cc+1].type && temp[rr][cc].type===temp[rr][cc+2].type) {
+               matchedPositions.add(`${rr},${cc}`); matchedPositions.add(`${rr},${cc+1}`); matchedPositions.add(`${rr},${cc+2}`);
+               hasMatch = true;
+            }
           }
         }
         for (let cc=0; cc<COLS; cc++) {
           for (let rr=0; rr<ROWS-2; rr++) {
-            if (temp[rr][cc] && temp[rr][cc].type!=='garbage' && temp[rr+1][cc] && temp[rr+2][cc] && temp[rr][cc].type===temp[rr+1][cc].type && temp[rr][cc].type===temp[rr+2][cc].type) return true;
+            if (temp[rr][cc] && temp[rr][cc].type!=='garbage' && temp[rr+1][cc] && temp[rr+2][cc] && temp[rr][cc].type===temp[rr+1][cc].type && temp[rr][cc].type===temp[rr+2][cc].type) {
+               matchedPositions.add(`${rr},${cc}`); matchedPositions.add(`${rr+1},${cc}`); matchedPositions.add(`${rr+2},${cc}`);
+               hasMatch = true;
+            }
           }
         }
-        return false;
+
+        let matchCount = matchedPositions.size;
+        let score = 0;
+        let heightScore = ROWS - r; 
+        
+        let isChainSetup = false;
+        if (!hasMatch) {
+           if (r + 1 < ROWS && ((this.engine.grid[r+1][c] && this.engine.grid[r+1][c].state === 'match') || (this.engine.grid[r+1][c+1] && this.engine.grid[r+1][c+1].state === 'match'))) {
+               isChainSetup = true;
+           }
+        }
+
+        if (hasMatch) {
+            score = 10;
+            switch(this.pattern) {
+                case 'small_chain': score += 5; break;
+                case 'big_chain': score = 5; break;
+                case 'multi_match':
+                    if (matchCount >= 4) score += matchCount * 20; 
+                    else score += 1; 
+                    break;
+                case 'survival': score += heightScore * 10; break;
+            }
+        } else {
+            if (isChainSetup) {
+                switch(this.pattern) {
+                    case 'small_chain': score = 15; break;
+                    case 'big_chain': score = 20; break;
+                    case 'multi_match': score = 2; break;
+                    case 'survival': score = 1; break;
+                }
+            } else {
+                if (this.pattern === 'big_chain' && Math.random() < 0.1) score = 1; 
+            }
+        }
+
+        return score;
       }
     }
 
@@ -1842,31 +1944,31 @@
       
       const animEl = document.createElement('div');
       animEl.style.position = 'fixed';
-      animEl.style.left = (fromRect.left + fromRect.width / 2 - 15) + 'px';
-      animEl.style.top = (fromRect.top + fromRect.height / 2 - 15) + 'px';
-      animEl.style.width = '30px';
-      animEl.style.height = '30px';
+      animEl.style.left = (fromRect.left + fromRect.width / 2 - 25) + 'px';
+      animEl.style.top = (fromRect.top + fromRect.height / 2 - 25) + 'px';
+      animEl.style.width = '50px';
+      animEl.style.height = '50px';
       animEl.style.backgroundColor = isHard ? '#a8b2bd' : '#5c636a';
-      animEl.style.border = '3px solid #fff';
-      animEl.style.borderRadius = '6px';
-      animEl.style.boxShadow = '0 0 10px rgba(255,255,255,0.8)';
+      animEl.style.border = '4px solid #fff';
+      animEl.style.borderRadius = '8px';
+      animEl.style.boxShadow = '0 0 15px rgba(255,255,255,1)';
       animEl.style.zIndex = '1000';
-      animEl.style.transition = 'all 0.4s cubic-bezier(0.25, 1, 0.5, 1)';
+      animEl.style.transition = 'all 0.5s cubic-bezier(0.25, 1, 0.5, 1)';
       animEl.style.pointerEvents = 'none';
       document.body.appendChild(animEl);
       
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          animEl.style.left = (toRect.left + toRect.width / 2 - 15) + 'px';
-          animEl.style.top = (toRect.top + toRect.height / 2 - 15) + 'px';
-          animEl.style.transform = 'scale(0.3) rotate(360deg)';
-          animEl.style.opacity = '0.4';
+          animEl.style.left = (toRect.left + toRect.width / 2 - 25) + 'px';
+          animEl.style.top = (toRect.top + toRect.height / 2 - 25) + 'px';
+          animEl.style.transform = 'scale(0.5) rotate(720deg)';
+          animEl.style.opacity = '0.3';
         });
       });
       
       setTimeout(() => {
         if (animEl.parentNode) animEl.parentNode.removeChild(animEl);
-      }, 400);
+      }, 500);
     }
 
     function distributeGarbage(senderId, totalBlocks, isHard) {
