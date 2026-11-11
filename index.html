@@ -1024,6 +1024,16 @@
         let needsMatchCheck = false;
         let isMoving = false;
         let playedGarbageSE = false;
+        let isErasing = false;
+
+        for (let r = 0; r < this.rows; r++) {
+          for (let c = 0; c < this.cols; c++) {
+            const b = this.grid[r][c];
+            if (b && (b.state === 'match' || b.state === 'transforming' || b.state === 'transforming_wait' || b.state === 'transformed_wait')) {
+               isErasing = true;
+            }
+          }
+        }
         
         let transformGroups = new Map();
         for (let r = 0; r < this.rows; r++) {
@@ -1119,7 +1129,7 @@
         }
 
         if (isTopFilled || garbageBlocked) {
-          if (!isMoving) {
+          if (!isMoving && !isErasing) {
             this.dangerTimer--;
             if (this.dangerTimer <= 0) {
               this.gameOver = true;
@@ -1136,7 +1146,7 @@
             this.manualRiseStep();
           } else {
             if (this.stopTimer > 0) this.stopTimer--;
-            else {
+            if (!isErasing && this.stopTimer <= 0) {
               this.riseOffset += this.riseSpeed;
               if (this.riseOffset >= 1.0) this.pushNewRow();
             }
@@ -1238,6 +1248,7 @@
                   });
                   needsMatchCheck = true;
                   SE.play('falledBlock');
+                  this.shakeTimer = 15;
                 }
               }
             }
@@ -1396,28 +1407,54 @@
 
           if (chainActive) this.chain++; else this.chain = 1;
 
+          if (!this.popups) this.popups = [];
+          const coordsArray = Array.from(matchedPositions);
+          
           if (this.chain >= 2) {
-             if (!this.popups) this.popups = [];
-             const coords = Array.from(matchedPositions)[0].split(',').map(Number);
+             const coords = coordsArray[0].split(',').map(Number);
              this.popups.push({
                text: `${this.chain}comb`,
                x: coords[1] * CELL_PX + CELL_PX / 2,
                y: coords[0] * CELL_PX,
                timer: 45,
-               initialTimer: 45
+               initialTimer: 45,
+               color: '#ffdf00'
+             });
+          }
+          
+          if (matchedPositions.size >= 4) {
+             const coords = coordsArray[Math.floor(coordsArray.length / 2)].split(',').map(Number);
+             this.popups.push({
+               text: `${matchedPositions.size}`,
+               x: coords[1] * CELL_PX + CELL_PX / 2,
+               y: coords[0] * CELL_PX,
+               timer: 45,
+               initialTimer: 45,
+               color: '#00d4ff'
              });
           }
 
-          this.stopTimer = 50 + (matchedPositions.size * 10) + (this.chain * 10);
+          let stopFrames = 0;
+          if (this.chain >= 2) stopFrames += this.chain * 60;
+          if (matchedPositions.size >= 4) stopFrames += (matchedPositions.size - 2) * 60;
+          
+          if (stopFrames > 0) {
+             this.stopTimer = Math.max(this.stopTimer, stopFrames);
+          } else {
+             this.stopTimer = Math.max(this.stopTimer, 30);
+          }
+
           this.score += matchedPositions.size * 10 * this.chain;
 
           let totalBlocks = 0;
           if (this.chain >= 2) {
-            totalBlocks += (this.chain - 1) * 12;
+            totalBlocks += (this.chain - 1) * 6;
           }
-          if (matchedPositions.size >= 4) {
-            totalBlocks += (matchedPositions.size - 3) * 6;
-          }
+          if (matchedPositions.size === 4) totalBlocks += 3;
+          else if (matchedPositions.size === 5) totalBlocks += 4;
+          else if (matchedPositions.size === 6) totalBlocks += 5;
+          else if (matchedPositions.size >= 7) totalBlocks += 6;
+
           if (hasSpecial) {
             totalBlocks += 6;
           }
@@ -1454,6 +1491,15 @@
       draw(engine) {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        ctx.save();
+        if (engine.shakeTimer > 0) {
+           engine.shakeTimer--;
+           const shakeOffsetX = (Math.random() - 0.5) * 8;
+           const shakeOffsetY = (Math.random() - 0.5) * 8;
+           ctx.translate(shakeOffsetX, shakeOffsetY);
+        }
+
         const offsetY = engine.riseOffset * CELL_PX;
 
         for (let r = 0; r < engine.rows; r++) {
@@ -1557,7 +1603,7 @@
             const progress = 1 - p.timer / p.initialTimer;
             const floatY = progress * 24;
             ctx.globalAlpha = Math.max(0, p.timer / 15); 
-            ctx.fillStyle = '#ffdf00'; 
+            ctx.fillStyle = p.color || '#ffdf00'; 
             ctx.font = 'bold 22px sans-serif'; 
             ctx.textAlign = 'center';
             ctx.lineWidth = 3;
@@ -1572,6 +1618,8 @@
           ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
           ctx.fillStyle = '#ff3366'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('GAME OVER', this.canvas.width/2, this.canvas.height/2);
         }
+        
+        ctx.restore();
       }
     }
 
@@ -1769,6 +1817,58 @@
       });
     }
 
+    function playGarbageSendAnimation(fromOppId, toOppId, isHard) {
+      if (!document.body) return;
+      const getEl = (id) => {
+        if (id === 'player' || id === myOnlineId || id === 'host' && myOnlineId === 'host') return document.getElementById('my-wrapper');
+        const opp = opponents.find(o => o.id === id);
+        if (opp) return document.getElementById(`rival-wrapper-${opp.index}`);
+        return null;
+      };
+      
+      const getTargetEl = (id) => {
+        if (id === 'player' || id === myOnlineId || id === 'host' && myOnlineId === 'host') return document.getElementById('my-garbage-preview');
+        const opp = opponents.find(o => o.id === id);
+        if (opp) return document.getElementById(`rival-garbage-preview-${opp.index}`);
+        return null;
+      };
+
+      const fromEl = getEl(fromOppId);
+      const toEl = getTargetEl(toOppId);
+      if (!fromEl || !toEl) return;
+      
+      const fromRect = fromEl.getBoundingClientRect();
+      const toRect = toEl.getBoundingClientRect();
+      
+      const animEl = document.createElement('div');
+      animEl.style.position = 'fixed';
+      animEl.style.left = (fromRect.left + fromRect.width / 2 - 15) + 'px';
+      animEl.style.top = (fromRect.top + fromRect.height / 2 - 15) + 'px';
+      animEl.style.width = '30px';
+      animEl.style.height = '30px';
+      animEl.style.backgroundColor = isHard ? '#a8b2bd' : '#5c636a';
+      animEl.style.border = '3px solid #fff';
+      animEl.style.borderRadius = '6px';
+      animEl.style.boxShadow = '0 0 10px rgba(255,255,255,0.8)';
+      animEl.style.zIndex = '1000';
+      animEl.style.transition = 'all 0.4s cubic-bezier(0.25, 1, 0.5, 1)';
+      animEl.style.pointerEvents = 'none';
+      document.body.appendChild(animEl);
+      
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          animEl.style.left = (toRect.left + toRect.width / 2 - 15) + 'px';
+          animEl.style.top = (toRect.top + toRect.height / 2 - 15) + 'px';
+          animEl.style.transform = 'scale(0.3) rotate(360deg)';
+          animEl.style.opacity = '0.4';
+        });
+      });
+      
+      setTimeout(() => {
+        if (animEl.parentNode) animEl.parentNode.removeChild(animEl);
+      }, 400);
+    }
+
     function distributeGarbage(senderId, totalBlocks, isHard) {
       if (isMatchOver && !isPracticeMode) return;
       if (currentMode.startsWith('online')) {
@@ -1804,16 +1904,88 @@
 
         candidateOpponents.forEach(opp => {
           const count = (opp.id === targetOppId) ? targetBlocks : otherEachBlocks;
-          if (count > 0) sendBlocksToOpponent(opp, count, isHard);
+          if (count > 0) {
+            playGarbageSendAnimation(senderId, opp.id, isHard);
+            sendBlocksToOpponent(opp, count, isHard);
+          }
         });
       } else {
         const eachBlocks = Math.floor(totalBlocks / candidateOpponents.length);
         if (eachBlocks > 0) {
           candidateOpponents.forEach(opp => {
+            playGarbageSendAnimation(senderId, opp.id, isHard);
             sendBlocksToOpponent(opp, eachBlocks, isHard);
           });
         }
       }
+    }
+
+    function distributeGarbageOnline(senderId, totalBlocks, isHard) {
+      let candidateOpponents = [];
+      if (senderId === myOnlineId) {
+        candidateOpponents = opponents.filter(o => !o.engine.gameOver);
+      } else {
+        if (!myEngine.gameOver && !isPracticeMode) candidateOpponents.push({ id: myOnlineId, engine: myEngine });
+        opponents.forEach(o => {
+          if (o.id !== senderId && !o.engine.gameOver) candidateOpponents.push(o);
+        });
+      }
+      if (candidateOpponents.length === 0) return;
+
+      let targetOppId = null;
+      if (senderId === myOnlineId && myTargetIndex !== -1 && opponents[myTargetIndex] && !opponents[myTargetIndex].engine.gameOver) {
+        targetOppId = opponents[myTargetIndex].id;
+      }
+
+      const hasTarget = targetOppId !== null && candidateOpponents.some(o => o.id === targetOppId);
+      let targetsDict = {};
+
+      if (hasTarget && candidateOpponents.length > 1) {
+        const targetBlocks = Math.floor(totalBlocks * 0.5);
+        const otherEachBlocks = Math.floor((totalBlocks * 0.5) / (candidateOpponents.length - 1));
+        candidateOpponents.forEach(opp => {
+          const count = (opp.id === targetOppId) ? targetBlocks : otherEachBlocks;
+          if (count > 0) targetsDict[opp.id] = count;
+        });
+      } else {
+        const eachBlocks = Math.floor(totalBlocks / candidateOpponents.length);
+        if (eachBlocks > 0) {
+          candidateOpponents.forEach(opp => targetsDict[opp.id] = eachBlocks);
+        }
+      }
+
+      if (Object.keys(targetsDict).length === 0) return;
+
+      if (myOnlineId === 'host') {
+        for (const [tId, count] of Object.entries(targetsDict)) {
+          playGarbageSendAnimation(senderId, tId, isHard);
+          if (tId === 'host') {
+            if (!isPracticeMode) sendBlocksToOpponent({ engine: myEngine }, count, isHard);
+          } else {
+            const opp = opponents.find(o => o.id === tId);
+            if (opp && opp.type === 'com') {
+               sendBlocksToOpponent(opp, count, isHard);
+            }
+          }
+        }
+        onlineConnections.forEach(c => {
+          if (c && c.open) c.send({ type: 'add_garbage_multi', senderId: senderId, targets: targetsDict, isHard });
+        });
+      } else {
+        for (const tId of Object.keys(targetsDict)) {
+           playGarbageSendAnimation(myOnlineId, tId, isHard);
+        }
+        if (onlineConnections[0] && onlineConnections[0].open) {
+          onlineConnections[0].send({ type: 'garbage_request', senderId: myOnlineId, targets: targetsDict, isHard });
+        }
+      }
+    }
+
+    function sendBlocksToOpponent(opp, count, isHard) {
+      let fullRows = Math.floor(count / 6);
+      let remainder = count % 6;
+      if (fullRows > 0) opp.engine.addGarbage(6, fullRows, isHard);
+      if (remainder > 0) opp.engine.addGarbage(remainder, 1, isHard);
     }
 
     function distributeGarbageOnline(senderId, totalBlocks, isHard) {
@@ -2309,7 +2481,20 @@
       container.dataset.qStr = qStr;
 
       container.innerHTML = '';
+      
+      let compressed = [];
       engine.garbageQueue.forEach(g => {
+        if (compressed.length > 0) {
+           let last = compressed[compressed.length - 1];
+           if (last.w === g.w && last.h === g.h && last.isHard === g.isHard) {
+              last.count++;
+              return;
+           }
+        }
+        compressed.push({ ...g, count: 1 });
+      });
+
+      compressed.forEach((g, idx) => {
         const block = document.createElement('div');
         block.style.backgroundColor = g.isHard ? '#a8b2bd' : '#5c636a';
         block.style.border = '1px solid #dee2e6';
@@ -2317,6 +2502,23 @@
         block.style.width = `${Math.min(36, Math.max(12, g.w * 5))}px`;
         block.style.height = `${Math.min(18, Math.max(8, g.h * 4))}px`;
         block.style.flexShrink = '0';
+        block.style.display = 'flex';
+        block.style.alignItems = 'center';
+        block.style.justifyContent = 'center';
+        
+        if (idx > 0) {
+           block.style.opacity = '0.5';
+        }
+        
+        if (g.count > 1) {
+           const span = document.createElement('span');
+           span.innerText = `x${g.count}`;
+           span.style.color = '#fff';
+           span.style.fontSize = '9px';
+           span.style.fontWeight = 'bold';
+           span.style.textShadow = '1px 1px 1px #000';
+           block.appendChild(span);
+        }
         container.appendChild(block);
       });
     }
@@ -2917,6 +3119,7 @@
         }
         else if (data.type === 'garbage_request' && isHostMode) {
           for (const [tId, count] of Object.entries(data.targets)) {
+            playGarbageSendAnimation(data.senderId, tId, data.isHard);
             if (tId === 'host') {
               if (!isPracticeMode) sendBlocksToOpponent({ engine: myEngine }, count, data.isHard);
             } else {
@@ -2925,10 +3128,15 @@
             }
           }
           onlineConnections.forEach(otherC => {
-            if (otherC.open) otherC.send({ type: 'add_garbage_multi', targets: data.targets, isHard: data.isHard });
+            if (otherC.open) otherC.send({ type: 'add_garbage_multi', senderId: data.senderId, targets: data.targets, isHard: data.isHard });
           });
         }
         else if (data.type === 'add_garbage_multi') {
+          for (const tId of Object.keys(data.targets)) {
+             if (data.senderId !== myOnlineId) {
+               playGarbageSendAnimation(data.senderId, tId, data.isHard);
+             }
+          }
           if (data.targets[myOnlineId] && !isPracticeMode) {
             sendBlocksToOpponent({ engine: myEngine }, data.targets[myOnlineId], data.isHard);
           }
