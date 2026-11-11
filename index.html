@@ -1416,8 +1416,8 @@
                text: `${this.chain}comb`,
                x: coords[1] * CELL_PX + CELL_PX / 2,
                y: coords[0] * CELL_PX,
-               timer: 45,
-               initialTimer: 45,
+               timer: 75,
+               initialTimer: 75,
                color: '#ffdf00',
                isNumber: false
              });
@@ -1429,8 +1429,8 @@
                text: `${matchedPositions.size}`,
                x: coords[1] * CELL_PX + CELL_PX / 2,
                y: coords[0] * CELL_PX,
-               timer: 45,
-               initialTimer: 45,
+               timer: 75,
+               initialTimer: 75,
                color: '#00d4ff',
                isNumber: true
              });
@@ -1583,7 +1583,8 @@
                   
                   const isHighestCol = isEnginePanic && highestCols.has(c);
                   const time = Date.now();
-                  const bounceY = isHighestCol ? Math.sin(time / 50 + c) * 5 : Math.sin(time / 150 + c) * 1.5;
+                  // 通常状態(isHighestColがfalse)の時はバウンスを0にし、ピンチ時は早く少し大きく揺らす
+                  const bounceY = isHighestCol ? Math.sin(time / 40 + c) * 4 : 0;
 
                   ctx.fillStyle = isFlashing ? '#6c757d' : conf.bg;
                   ctx.beginPath(); ctx.roundRect(x+2, y+2, CELL_PX-4, CELL_PX-4, 8); ctx.fill();
@@ -1953,7 +1954,8 @@
       animEl.style.borderRadius = '8px';
       animEl.style.boxShadow = '0 0 15px rgba(255,255,255,1)';
       animEl.style.zIndex = '1000';
-      animEl.style.transition = 'all 0.5s cubic-bezier(0.25, 1, 0.5, 1)';
+      // 0.5s から 0.8s へアニメーション時間を延長
+      animEl.style.transition = 'all 0.8s cubic-bezier(0.25, 1, 0.5, 1)';
       animEl.style.pointerEvents = 'none';
       document.body.appendChild(animEl);
       
@@ -1968,7 +1970,7 @@
       
       setTimeout(() => {
         if (animEl.parentNode) animEl.parentNode.removeChild(animEl);
-      }, 500);
+      }, 800);
     }
 
     function distributeGarbage(senderId, totalBlocks, isHard) {
