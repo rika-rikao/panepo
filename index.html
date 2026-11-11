@@ -375,13 +375,15 @@
     document.getElementById('bgm-volume').value = initBgmVol;
     document.getElementById('bgm-volume-val').innerText = Math.floor(initBgmVol * 100);
 
-    document.getElementById('se-volume').addEventListener('input', (e) => {
+    const updateSeVolume = (e) => {
       SE.volume = parseFloat(e.target.value);
       document.getElementById('se-volume-val').innerText = Math.floor(SE.volume * 100);
       localStorage.setItem('pdw_se_vol', SE.volume);
-    });
+    };
+    document.getElementById('se-volume').addEventListener('input', updateSeVolume);
+    document.getElementById('se-volume').addEventListener('change', updateSeVolume);
     
-    document.getElementById('bgm-volume').addEventListener('input', (e) => {
+    const updateBgmVolume = (e) => {
       const vol = parseFloat(e.target.value);
       bgmAudio.volume = vol;
       panicBgmAudio.volume = vol;
@@ -395,7 +397,9 @@
       }
       document.getElementById('bgm-volume-val').innerText = Math.floor(vol * 100);
       localStorage.setItem('pdw_bgm_vol', vol);
-    });
+    };
+    document.getElementById('bgm-volume').addEventListener('input', updateBgmVolume);
+    document.getElementById('bgm-volume').addEventListener('change', updateBgmVolume);
 
     function handleBgmFiles(files) {
       const arr = Array.from(files).filter(f => f.type.startsWith('audio/'));
