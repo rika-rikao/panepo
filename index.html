@@ -208,8 +208,9 @@
       </div>
 
       <div id="main-menu-actions" style="display:flex; flex-direction:column; align-items:center; gap:15px; width:100%;">
-        <button class="btn" onclick="startSingleGame()">ひとりで練習</button>
+        <button class="btn" onclick="showSingleMenu()">ひとりで練習</button>
         <button class="btn" onclick="showComMenu()">COMと対戦</button>
+        <button class="btn" onclick="showRankingMenu()">ランキング</button>
         <button class="btn" onclick="openSettings()" style="background:#1a4d3e; border-color:#4ecca3;">⚙️設定</button>
         
         <div style="border-top:1px solid rgba(255,255,255,0.2); width:100%; margin:5px 0;"></div>
@@ -242,6 +243,43 @@
 
     </div>
     
+    <div id="single-menu" style="display:none; flex-direction:column; gap:12px; align-items:center; width:100%;">
+      <h2 style="color:#4ecca3">ひとりで練習</h2>
+      <div style="font-size:0.9rem; color:#4ecca3; display:flex; align-items:center; gap:8px;">
+        <span>モード:</span>
+        <select id="single-mode-select" class="input-box" style="width: auto; padding: 5px; font-size: 0.85rem; border-radius: 10px;" onchange="updateSingleMenu()">
+          <option value="free" selected>フリー練習 (エンドレス)</option>
+          <option value="ta">タイムアタック (3分)</option>
+          <option value="sa">スコアアタック</option>
+          <option value="survival">勝ち抜きモード</option>
+        </select>
+      </div>
+      
+      <div id="survival-settings" style="display:none; flex-direction:column; gap:8px; font-size:0.8rem; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; width: 260px; text-align: left;">
+        <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="survival-clear-garbage" checked> COM撃破時に予告お邪魔を無効化</label>
+        <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="survival-cancel-sent" checked> 次COMへのお邪魔持ち越しを無効化</label>
+        <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="survival-keep-speed"> 自動せり上がり速度を初期値に固定</label>
+      </div>
+
+      <button class="btn" onclick="startSingleMode()">スタート</button>
+      <button class="btn" style="background:#444; border-color:#888;" onclick="backToMainMenu()">戻る</button>
+    </div>
+
+    <div id="ranking-menu" style="display:none; flex-direction:column; gap:12px; align-items:center; width:100%;">
+      <h2 style="color:#ffd700">ランキング</h2>
+      <div style="font-size:0.9rem; color:#4ecca3; display:flex; align-items:center; gap:8px;">
+        <select id="ranking-mode-select" class="input-box" style="width: auto; padding: 5px; font-size: 0.85rem; border-radius: 10px;" onchange="showRankingMenu()">
+          <option value="single_free">フリー練習</option>
+          <option value="single_ta">タイムアタック</option>
+          <option value="single_sa">スコアアタック</option>
+          <option value="single_survival">勝ち抜きモード</option>
+          <option value="com">COMと対戦</option>
+        </select>
+      </div>
+      <div id="ranking-list" style="width:100%; max-width: 300px; background:rgba(0,0,0,0.5); border-radius:8px; padding:10px; font-size:0.9rem; line-height:1.8;"></div>
+      <button class="btn" style="background:#444; border-color:#888;" onclick="backToMainMenu()">戻る</button>
+    </div>
+
     <div id="com-menu" style="display:none; flex-direction:column; gap:12px; align-items:center;">
       <h2 style="color:#4ecca3">CPU対戦設定</h2>
       <div style="font-size:0.9rem; color:#4ecca3; display:flex; align-items:center; gap:8px;">
@@ -282,6 +320,7 @@
         </div>
         <div class="board-header">
           <span id="player-label">YOU</span>
+          <span id="timer-label" style="color:#ffd700;">00:00</span>
           <span id="score-label">SCORE: 0</span>
         </div>
         <div class="canvas-container"><canvas id="my-canvas"></canvas></div>
@@ -812,8 +851,12 @@
         this.riseOffset = 0; 
         this.isPractice = false;
         
-        this.riseSpeed = 0.0012 - (handicap - 3) * 0.0003;
-        if (this.riseSpeed < 0.0003) this.riseSpeed = 0.0003;
+        this.baseRiseSpeed = 0.0012 - (handicap - 3) * 0.0003;
+        if (this.baseRiseSpeed < 0.0003) this.baseRiseSpeed = 0.0003;
+        this.riseSpeed = this.baseRiseSpeed;
+        
+        this.timeElapsed = 0;
+        this.keepSpeed = false;
 
         this.stopTimer = 0;
         this.dangerTimer = 180; 
@@ -892,9 +935,15 @@
         if (isFloating(b1, c) || isFloating(b2, c + 1)) return false;
 
         this.grid[r][c] = b2; this.grid[r][c + 1] = b1;
-
-        if (this.grid[r][c]) this.grid[r][c].chainEligible = false;
-        if (this.grid[r][c+1]) this.grid[r][c+1].chainEligible = false;
+        
+        if (this.grid[r][c]) {
+           this.grid[r][c].chainEligible = false;
+           this.grid[r][c].swapAnim = { dir: -1, timer: 6 };
+        }
+        if (this.grid[r][c+1]) {
+           this.grid[r][c+1].chainEligible = false;
+           this.grid[r][c+1].swapAnim = { dir: 1, timer: 6 };
+        }
 
         if (this.grid[r][c] && r+1 < this.rows && this.grid[r+1][c] === null) { this.grid[r][c].state = 'hover'; this.grid[r][c].timer = 12; }
         if (this.grid[r][c+1] && r+1 < this.rows && this.grid[r+1][c+1] === null) { this.grid[r][c+1].state = 'hover'; this.grid[r][c+1].timer = 12; }
@@ -1012,7 +1061,7 @@
             let isGroupBottom = (item.r === groupMaxR[item.b.groupId]);
             
             item.b.state = 'transforming';
-            item.b.transformDelay = idx * 6;
+            item.b.transformDelay = idx * 8;
             item.b.isTarget = isGroupBottom;
             item.b.transformToNormal = isGroupBottom && !item.b.isHard;
             item.b.transformGroupId = transformGroupId;
@@ -1020,9 +1069,14 @@
         }
       }
 
-      update() {
+      update(deltaTime = 1000/60) {
         if (this.gameOver && !this.isPractice) return;
         if (matchState !== 'playing' && !this.isPractice) return;
+        
+        this.timeElapsed += deltaTime;
+        if (this.timeElapsed > 30000 && !this.keepSpeed) {
+          this.riseSpeed = this.baseRiseSpeed * Math.pow(1.05, Math.floor((this.timeElapsed - 30000) / 20000));
+        }
 
         let needsMatchCheck = false;
         let isMoving = false;
@@ -1032,8 +1086,15 @@
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
             const b = this.grid[r][c];
-            if (b && (b.state === 'match' || b.state === 'transforming' || b.state === 'transforming_wait' || b.state === 'transformed_wait')) {
-               isErasing = true;
+            if (b) {
+               if (b.state === 'match' || b.state === 'transforming' || b.state === 'transforming_wait' || b.state === 'transformed_wait') {
+                  isErasing = true;
+               }
+               if (b.swapAnim) {
+                  isMoving = true;
+                  b.swapAnim.timer--;
+                  if (b.swapAnim.timer <= 0) delete b.swapAnim;
+               }
             }
           }
         }
@@ -1543,7 +1604,11 @@
           for (let c = 0; c < engine.cols; c++) {
             const b = engine.grid[r][c];
             if (b) {
-              const x = c * CELL_PX;
+              let drawX = c * CELL_PX;
+              if (b.swapAnim) {
+                 drawX += -(b.swapAnim.dir) * (b.swapAnim.timer / 6) * CELL_PX;
+              }
+              const x = drawX;
               const y = r * CELL_PX - offsetY + (b.fallY * CELL_PX);
 
               if (b.type === 'garbage') {
@@ -1578,8 +1643,8 @@
                 }
 
                 if (b.state === 'transforming') {
-                  if (b.transformDelay < 8) {
-                    ctx.fillStyle = `rgba(255, 255, 255, ${(8 - b.transformDelay) / 8})`;
+                  if (b.transformDelay < 11) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${(11 - b.transformDelay) / 11})`;
                     ctx.fillRect(x, y, CELL_PX, CELL_PX);
                   }
                 }
@@ -1677,11 +1742,12 @@
       constructor(engine, level, id) {
         this.engine = engine; this.level = level; this.id = id;
         this.target = null;
-        this.thinkInterval = [50, 35, 20, 5][level - 1] || 35; 
-        this.moveInterval = [15, 10, 5, 2][level - 1] || 10;   
+        this.thinkInterval = Math.max(2, Math.floor(50 - level * 1.5));
+        this.moveInterval = Math.max(1, Math.floor(15 - level * 0.5));
         this.actionTimer = this.thinkInterval;
         this.moveTimer = 0;
-        this.engine.riseSpeed = 0.0010 + (level * 0.0002); 
+        this.engine.baseRiseSpeed = 0.0010 + (level * 0.0001);
+        this.engine.riseSpeed = this.engine.baseRiseSpeed;
         
         const patterns = ['small_chain', 'big_chain', 'multi_match', 'survival'];
         this.pattern = patterns[Math.floor(Math.random() * patterns.length)];
@@ -1876,6 +1942,7 @@
     let countdownTimer = null;
     let hostDisconnected = false;
     let isPracticeMode = false;
+    let currentSurvivalWins = 0;
     
     // 状態管理用
     let rematchReady = {};
@@ -1886,8 +1953,49 @@
       t.innerText = msg; t.style.display = 'block'; 
       setTimeout(() => t.style.display = 'none', 3000); 
     }
+    function showSingleMenu() { document.getElementById('main-menu-actions').style.display = 'none'; document.getElementById('single-menu').style.display = 'flex'; updateSingleMenu(); }
     function showComMenu() { document.getElementById('main-menu-actions').style.display = 'none'; document.getElementById('com-menu').style.display = 'flex'; }
-    function backToMainMenu() { document.getElementById('com-menu').style.display = 'none'; document.getElementById('main-menu-actions').style.display = 'flex'; }
+    function showRankingMenu() {
+      document.getElementById('main-menu-actions').style.display = 'none';
+      document.getElementById('ranking-menu').style.display = 'flex';
+      const mode = document.getElementById('ranking-mode-select').value;
+      const listEl = document.getElementById('ranking-list');
+      const data = getRankingData(mode);
+      if (data.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center; color:#aaa;">記録なし</div>';
+      } else {
+        listEl.innerHTML = data.map((d, i) => {
+          let scoreText = mode === 'single_survival' ? `${d.score}連勝 (Lv.${d.level || 0})` : `Score: ${d.score}`;
+          return `<div><span style="display:inline-block; width:25px; color:#ff007f;">${i+1}.</span> ${scoreText} <span style="font-size:0.75rem; color:#aaa;">(HD:${d.handicap})</span></div>`;
+        }).join('');
+      }
+    }
+    function updateSingleMenu() {
+      const mode = document.getElementById('single-mode-select').value;
+      document.getElementById('survival-settings').style.display = (mode === 'survival') ? 'flex' : 'none';
+    }
+    function startSingleMode() {
+      const mode = document.getElementById('single-mode-select').value;
+      startGame('single_' + mode, 1, mode === 'survival' ? 2 : 1);
+    }
+    function backToMainMenu() { 
+      document.getElementById('com-menu').style.display = 'none'; 
+      document.getElementById('single-menu').style.display = 'none'; 
+      document.getElementById('ranking-menu').style.display = 'none'; 
+      document.getElementById('main-menu-actions').style.display = 'flex'; 
+    }
+
+    function getRankingData(mode) {
+      try { return JSON.parse(localStorage.getItem('pdw_ranking_' + mode)) || []; } catch(e) { return []; }
+    }
+    function saveRankingData(mode, entry) {
+      let data = getRankingData(mode);
+      data.push(entry);
+      data.sort((a, b) => b.score - a.score);
+      data = data.slice(0, 5);
+      localStorage.setItem('pdw_ranking_' + mode, JSON.stringify(data));
+      return data.findIndex(e => e === entry) !== -1;
+    }
 
     function selectTarget(index) {
       if (isMatchOver && !isPracticeMode) return;
@@ -2251,33 +2359,53 @@
         if (o.engine && !o.engine.gameOver) aliveCount++;
       });
 
-      // 自分が負けた瞬間
+       // 自分が負けた瞬間
       if (myEngine && myEngine.gameOver && !isMatchOver && !isPracticeMode) {
         isMatchOver = true;
         isDeadInMatch = true;
 
-        // 即座に敗北シグナルを送信
         if (currentMode === 'online') {
           const syncData = { type: 'sync', senderId: myOnlineId, gameOver: true };
           onlineConnections.forEach(c => { if (c && c.open) c.send(syncData); });
         }
 
-        if (currentMode === 'single') {
+        let scoreVal = currentMode === 'single_survival' ? currentSurvivalWins : myEngine.score;
+        let isRankIn = saveRankingData(currentMode, { score: scoreVal, handicap: myEngine.handicap, level: currentComLevel, date: Date.now() });
+
+        if (currentMode.startsWith('single')) {
            matchState = 'gameover';
            stopAllEngines();
-           showResultModal("GAME OVER");
+           showResultModal(isRankIn ? "NEW RECORD!" : "GAME OVER");
         } else {
            if (currentMode === 'com') stopAllEngines(); 
-           showResultModal("LOSE...");
+           showResultModal(isRankIn ? "NEW RECORD! (LOSE)" : "LOSE...");
         }
       }
 
       // 自分以外の全員が負けた瞬間（自分が生き残って勝利）
       if (!isMatchOver && opponents.length > 0 && aliveCount === 1 && !myEngine.gameOver && !isDeadInMatch) {
-         isMatchOver = true;
-         matchState = 'gameover';
-         stopAllEngines();
-         showResultModal("WIN!!");
+         if (currentMode === 'single_survival') {
+            const comOpp = opponents[0];
+            if (comOpp.engine && comOpp.engine.gameOver && !comOpp.coolTimeStarted) {
+               comOpp.coolTimeStarted = true;
+               currentSurvivalWins++;
+               comOpp.coolTime = 180;
+               SE.play('fanfareMid');
+               if (document.getElementById('survival-clear-garbage').checked) {
+                  myEngine.garbageQueue = [];
+               }
+            }
+            return;
+         } else {
+           isMatchOver = true;
+           matchState = 'gameover';
+           stopAllEngines();
+           let isRankIn = false;
+           if (currentMode === 'com') {
+             isRankIn = saveRankingData('com', { score: myEngine.score, handicap: myEngine.handicap, level: currentComLevel, date: Date.now() });
+           }
+           showResultModal(isRankIn ? "WIN!! (NEW RECORD)" : "WIN!!");
+         }
       }
 
       // 全滅、もしくは自分以外全滅して自分も負けた場合など、試合が完全に終わった状態
@@ -2436,7 +2564,8 @@
       isDeadInMatch = false;
       isPracticeMode = false;
       myTargetIndex = -1;
-      currentMatchId = Date.now(); 
+       currentMatchId = Date.now(); 
+      currentSurvivalWins = 0;
       
       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
       
@@ -2454,6 +2583,9 @@
         true
       );
       myEngine.garbageQueue = [];
+      if (currentMode === 'single_survival' && document.getElementById('survival-keep-speed').checked) {
+         myEngine.keepSpeed = true;
+      }
 
       const rivalsArea = document.getElementById('rivals-area');
       const rivalsTopArea = document.getElementById('rivals-top-area');
@@ -2461,7 +2593,7 @@
       rivalsTopArea.innerHTML = '';
       opponents = [];
 
-      const opponentCount = currentMode === 'single' ? 0 : currentTotalPlayers - 1;
+      const opponentCount = currentMode.startsWith('single') && currentMode !== 'single_survival' ? 0 : currentTotalPlayers - 1;
 
       for (let i = 0; i < opponentCount; i++) {
         const wrapper = document.createElement('div');
@@ -2470,7 +2602,10 @@
         wrapper.id = `rival-wrapper-${i}`;
         wrapper.onclick = () => selectTarget(i);
 
-        let nameColor = currentMode === 'com' ? '#aaaaaa' : '#e94560';
+        let isComMode = currentMode === 'com' || currentMode === 'single_survival';
+        let nameColor = isComMode ? '#aaaaaa' : '#e94560';
+        let oppName = isComMode ? `COM ${i+1}` : `RIVAL ${i+1}`;
+        if (currentMode === 'single_survival') oppName = `COM Lv.${currentComLevel}`;
 
         wrapper.innerHTML = `
           <div class="garbage-preview-box">
@@ -2478,7 +2613,7 @@
             <div id="rival-garbage-preview-${i}" class="preview-list"></div>
           </div>
           <div class="board-header">
-            <span style="color: ${nameColor};">${currentMode === 'com' ? `COM ${i+1}` : `RIVAL ${i+1}`} <span class="target-badge">🎯 TARGET</span></span>
+            <span style="color: ${nameColor};" id="rival-name-label-${i}">${oppName} <span class="target-badge">🎯 TARGET</span></span>
             <span id="rival-score-label-${i}">SCORE: 0</span>
           </div>
           <div class="canvas-container"><canvas id="rival-canvas-${i}"></canvas></div>
@@ -2489,7 +2624,7 @@
         const rRenderer = new BoardRenderer(`rival-canvas-${i}`);
         let rEngine = null, rAI = null;
 
-        if (currentMode === 'com') {
+        if (isComMode) {
           rEngine = new PonEngine(
             (state) => { if (state === 'gameover') checkMatchEnd(); },
             (totalBlocks, isHard) => { distributeGarbage(oppId, totalBlocks, isHard); },
@@ -2518,7 +2653,7 @@
     }
 
     function startSingleGame() { 
-      startGame('single', 1, 1); 
+      startGame('single_free', 1, 1); 
     }
     
     function startComGame(level) {
@@ -2651,15 +2786,34 @@
       while (accumulator >= FIXED_TIME_STEP) {
         if (!isMatchOver || isPracticeMode) {
           pollGamepadInput();
-          if (myEngine) myEngine.update();
+          if (myEngine) myEngine.update(FIXED_TIME_STEP);
         }
         if (!isMatchOver || isPracticeMode) {
           opponents.forEach(opp => {
-            // ホスト管理下のCOMのみローカルで自律更新させる（人間プレイヤーの盤面をローカルで勝手に更新しない！）
-            const isLocalControlledCom = (opp.type === 'com') && (currentMode === 'com' || myOnlineId === 'host');
-            if (isLocalControlledCom) {
-              if (opp.ai) opp.ai.update();
-              if (opp.engine && !opp.engine.gameOver) opp.engine.update();
+            if (currentMode === 'single_survival' && opp.coolTimeStarted) {
+               opp.coolTime--;
+               if (opp.coolTime <= 0) {
+                 opp.coolTimeStarted = false;
+                 opp.engine.gameOver = false;
+                 opp.engine.grid = Array.from({ length: opp.engine.rows }, () => Array(opp.engine.cols).fill(null));
+                 opp.engine.initGrid(5);
+                 if (document.getElementById('survival-cancel-sent').checked) {
+                   opp.engine.garbageQueue = [];
+                 }
+                 let n = currentSurvivalWins + 1;
+                 let minLv = n <= 5 ? 0 : (n <= 10 ? 5 : 0);
+                 let maxLv = n <= 10 ? (n <= 5 ? 4 : 9) : (Math.floor((n - 1) / 5) * 5 + 4);
+                 let nextLv = Math.floor(Math.random() * (maxLv - minLv + 1)) + minLv;
+                 opp.level = nextLv;
+                 opp.ai = new ComAI(opp.engine, nextLv, opp.id);
+                 document.getElementById(`rival-name-label-0`).innerHTML = `COM Lv.${nextLv} <span class="target-badge">🎯 TARGET</span>`;
+               }
+            } else {
+               const isLocalControlledCom = (opp.type === 'com') && (currentMode === 'com' || currentMode === 'single_survival' || myOnlineId === 'host');
+               if (isLocalControlledCom) {
+                 if (opp.ai) opp.ai.update();
+                 if (opp.engine && !opp.engine.gameOver) opp.engine.update(FIXED_TIME_STEP);
+               }
             }
           });
           checkPanic(); 
@@ -2669,14 +2823,29 @@
       
       if (myEngine) {
         myRenderer.draw(myEngine);
+        const t = Math.floor(myEngine.timeElapsed / 1000);
+        const m = String(Math.floor(t / 60)).padStart(2, '0');
+        const s = String(t % 60).padStart(2, '0');
+        document.getElementById('timer-label').innerText = `${m}:${s}`;
         document.getElementById('score-label').innerText = `SCORE: ${myEngine.score} | CHAIN: ${myEngine.chain}`;
         updateGarbagePreview(myEngine, 'my-garbage-preview');
+        
+        if (currentMode === 'single_ta' && myEngine.timeElapsed >= 180000 && !myEngine.gameOver && !isMatchOver) {
+           myEngine.gameOver = true;
+           checkMatchEnd();
+        }
       }
       opponents.forEach((opp, i) => {
         if (opp.renderer && opp.engine) {
           opp.renderer.draw(opp.engine);
           const scoreEl = document.getElementById(`rival-score-label-${i}`);
-          if (scoreEl) scoreEl.innerText = `SCORE: ${opp.engine.score}`;
+          if (scoreEl) {
+             if (currentMode === 'single_survival') {
+                scoreEl.innerText = `WINS: ${currentSurvivalWins}`;
+             } else {
+                scoreEl.innerText = `SCORE: ${opp.engine.score}`;
+             }
+          }
           updateGarbagePreview(opp.engine, `rival-garbage-preview-${i}`);
         }
       });
