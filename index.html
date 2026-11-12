@@ -34,6 +34,7 @@
     #menu-overlay {
       position: absolute; inset: 0; background: rgba(10, 10, 25, 0.95); z-index: 100;
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; padding: 20px;
+      overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: auto !important;
     }
     .title {
       font-size: 2.2rem; font-weight: 900; background: linear-gradient(45deg, #ff007f, #00d4ff);
@@ -46,6 +47,39 @@
     .btn:active { transform: scale(0.95); background: #e94560; }
     .btn:disabled { background: #555; border-color: #777; cursor: not-allowed; transform: none; }
     .input-box { padding: 10px; border-radius: 20px; border: 2px solid #4ecca3; background: #162447; color: #fff; text-align: center; width: 240px; outline: none; }
+
+    /* 横画面・狭小画面向けレスポンシブスタイル */
+    @media (orientation: landscape) and (max-height: 580px) {
+      #menu-overlay {
+        justify-content: flex-start;
+        padding: 10px 15px;
+        gap: 8px;
+      }
+      .title {
+        font-size: 1.6rem;
+        margin-bottom: 2px;
+      }
+      #main-menu {
+        max-width: 580px !important;
+        gap: 8px !important;
+      }
+      #main-menu-actions {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px !important;
+        width: 100% !important;
+      }
+      #main-menu-actions .btn {
+        min-width: unset;
+        width: 100%;
+        padding: 8px 12px;
+        font-size: 0.95rem;
+      }
+      .online-menu-section {
+        grid-column: span 2;
+        width: 100%;
+      }
+    }
     
     #settings-overlay {
       position: fixed;
@@ -215,7 +249,7 @@
         
         <div style="border-top:1px solid rgba(255,255,255,0.2); width:100%; margin:5px 0;"></div>
         
-        <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+        <div class="online-menu-section" style="display:flex; flex-direction:column; align-items:center; gap:8px;">
           <input type="text" id="peer-room-id" class="input-box" placeholder="部屋コード (最大4人)" maxlength="10">
           <div style="font-size: 0.9rem; color: #4ecca3; display: flex; align-items: center; gap: 8px;">
             <span>人数:</span>
@@ -224,6 +258,10 @@
               <option value="3">3人対戦</option>
               <option value="4">4人対戦</option>
             </select>
+          </div>
+          <div style="font-size: 0.85rem; color: #4ecca3; display: flex; align-items: center; justify-content: space-between; width: 240px; background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 10px;">
+            <span>不足COM強さ: <b style="color:#ff007f;">Lv.<span id="online-com-level-val">3</span></b></span>
+            <input type="range" id="online-com-level" min="1" max="10" step="1" value="3" style="width:90px;" oninput="document.getElementById('online-com-level-val').innerText = this.value">
           </div>
           <div style="display:flex; gap:10px;">
             <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="createRoom()">部屋を作る</button>
@@ -256,6 +294,10 @@
       </div>
       
       <div id="survival-settings" style="display:none; flex-direction:column; gap:8px; font-size:0.8rem; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; width: 260px; text-align: left;">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <span style="color:#4ecca3;">初期COM強さ: <b style="color:#ff007f;">Lv.<span id="survival-init-level-val">1</span></b></span>
+          <input type="range" id="survival-init-level" min="1" max="10" step="1" value="1" style="width:110px;" oninput="document.getElementById('survival-init-level-val').innerText = this.value">
+        </div>
         <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="survival-clear-garbage" checked> COM撃破時に予告お邪魔を無効化</label>
         <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="survival-cancel-sent" checked> 次COMへのお邪魔持ち越しを無効化</label>
         <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="survival-keep-speed"> 自動せり上がり速度を初期値に固定</label>
@@ -280,7 +322,7 @@
       <button class="btn" style="background:#444; border-color:#888;" onclick="backToMainMenu()">戻る</button>
     </div>
 
-    <div id="com-menu" style="display:none; flex-direction:column; gap:12px; align-items:center;">
+    <div id="com-menu" style="display:none; flex-direction:column; gap:12px; align-items:center; width:100%; max-width:350px;">
       <h2 style="color:#4ecca3">CPU対戦設定</h2>
       <div style="font-size:0.9rem; color:#4ecca3; display:flex; align-items:center; gap:8px;">
         <span>対戦人数:</span>
@@ -290,10 +332,19 @@
           <option value="4">4人対戦 (1 vs 3)</option>
         </select>
       </div>
-      <button class="btn" onclick="startComGame(1)">Level 1 (やさしい)</button>
-      <button class="btn" onclick="startComGame(2)">Level 2 (ふつう)</button>
-      <button class="btn" onclick="startComGame(3)">Level 3 (むずかしい)</button>
-      <button class="btn" onclick="startComGame(4)">Level 4 (げきむず)</button>
+      <div style="font-size:0.9rem; color:#4ecca3; display:flex; flex-direction:column; align-items:center; gap:6px; width: 100%; background:rgba(0,0,0,0.3); padding:10px; border-radius:10px; box-sizing:border-box;">
+        <div style="display:flex; justify-content:space-between; width:100%;">
+          <span>CPU強さ:</span>
+          <span style="font-weight:bold; color:#ff007f;">Lv.<span id="com-level-display">2</span></span>
+        </div>
+        <input type="range" id="com-level-slider" min="1" max="10" step="1" value="2" style="width:100%;" oninput="document.getElementById('com-level-display').innerText = this.value">
+        <div style="display:flex; justify-content:space-between; width:100%; font-size:0.75rem; color:#888;">
+          <span>1:やさしい</span>
+          <span>5:ふつう</span>
+          <span>10:げきむず</span>
+        </div>
+      </div>
+      <button class="btn" onclick="startComGameFromSlider()">スタート</button>
       <button class="btn" style="background:#444; border-color:#888;" onclick="backToMainMenu()">戻る</button>
     </div>
   </div>
@@ -304,6 +355,7 @@
 
     <div id="game-container">
       <div id="controls-container" style="display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; z-index: 20; width: 110px;">
+        <button id="layout-toggle-btn" class="small-btn" tabindex="-1" onclick="toggleLandscapeLayout()" style="display:none; width:100%; font-size:0.75rem; padding:5px 2px; text-align:center;">UI: 横並び</button>
         <label id="handedness-wrapper" class="switch-wrapper" style="background: rgba(0,0,0,0.85); padding: 6px 8px; border-radius: 10px; flex-direction: column; gap: 4px; border: 1px solid #4ecca3;">
           <input type="checkbox" id="handedness-toggle" tabindex="-1" onchange="toggleHandedness()"> <span id="handedness-text" style="font-size: 0.75rem;">右利きモード</span>
         </label>
@@ -709,13 +761,37 @@
     }
 
     // --- コンフィグ・ゲームパッド管理 ---
-    let keyConfig = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Swap: 'Space', Rise: 'ShiftLeft', Target: 'KeyE' };
-    let padConfig = { Up: 12, Down: 13, Left: 14, Right: 15, Swap: 0, Rise: 5, Target: 4 };
+    const ACTION_LABELS = {
+      Up: '上', Down: '下', Left: '左', Right: '右', Swap: '入替',
+      Rise1: 'せり上げ1', Rise2: 'せり上げ2',
+      TargetRight: '標的(右)', TargetLeft: '標的(左)'
+    };
+
+    let keyConfig = {
+      Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight',
+      Swap: 'Space', Rise1: 'ShiftLeft', Rise2: 'ShiftRight',
+      TargetRight: 'KeyE', TargetLeft: 'KeyQ'
+    };
+    let padConfig = {
+      Up: 12, Down: 13, Left: 14, Right: 15,
+      Swap: 0, Rise1: 5, Rise2: 7,
+      TargetRight: 5, TargetLeft: 4
+    };
     
     try {
       const sKey = localStorage.getItem('pdw_key'), sPad = localStorage.getItem('pdw_pad');
-      if (sKey) keyConfig = { ...keyConfig, ...JSON.parse(sKey) };
-      if (sPad) padConfig = { ...padConfig, ...JSON.parse(sPad) };
+      if (sKey) {
+        const parsedKey = JSON.parse(sKey);
+        if (parsedKey.Rise && !parsedKey.Rise1) parsedKey.Rise1 = parsedKey.Rise;
+        if (parsedKey.Target && !parsedKey.TargetRight) parsedKey.TargetRight = parsedKey.Target;
+        keyConfig = { ...keyConfig, ...parsedKey };
+      }
+      if (sPad) {
+        const parsedPad = JSON.parse(sPad);
+        if (parsedPad.Rise !== undefined && parsedPad.Rise1 === undefined) parsedPad.Rise1 = parsedPad.Rise;
+        if (parsedPad.Target !== undefined && parsedPad.TargetRight === undefined) parsedPad.TargetRight = parsedPad.Target;
+        padConfig = { ...padConfig, ...parsedPad };
+      }
     } catch(e) {}
 
     let assigningAction = null, assignType = null;
@@ -761,14 +837,16 @@
         const row = document.createElement('div');
         row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center';
         
-        const lbl = document.createElement('span'); lbl.innerText = action; lbl.style.width = '50px'; lbl.style.fontSize = '0.9rem';
+        const lbl = document.createElement('span'); 
+        lbl.innerText = ACTION_LABELS[action] || action; 
+        lbl.style.width = '75px'; lbl.style.fontSize = '0.85rem';
         
         const kBtn = document.createElement('button'); kBtn.className = 'config-btn';
-        kBtn.innerText = `Key: ${keyConfig[action].replace('Arrow','').replace('Key','')}`;
+        kBtn.innerText = `Key: ${(keyConfig[action] || '').replace('Arrow','').replace('Key','')}`;
         kBtn.onclick = () => { assigningAction = action; assignType = 'key'; kBtn.innerText = '押してください'; };
         
         const pBtn = document.createElement('button'); pBtn.className = 'config-btn';
-        pBtn.innerText = `Pad: ${padConfig[action] !== null ? padConfig[action] : 'なし'}`;
+        pBtn.innerText = `Pad: ${padConfig[action] !== null && padConfig[action] !== undefined ? padConfig[action] : 'なし'}`;
         pBtn.onclick = () => { assigningAction = action; assignType = 'pad'; pBtn.innerText = '押してください'; };
         
         row.append(lbl, kBtn, pBtn);
@@ -792,19 +870,73 @@
           renderConfigUI();
         }
       } else {
-        const justPressed = (btnIdx) => btnIdx !== null && pressed[btnIdx] && !globalPadPrevState[btnIdx];
+        const justPressed = (btnIdx) => btnIdx !== null && btnIdx !== undefined && pressed[btnIdx] && !globalPadPrevState[btnIdx];
         
         if (matchState !== 'playing') {
-          if (justPressed(padConfig.Up) || justPressed(padConfig.Left)) {
-            moveMenuFocus(-1);
-          }
-          if (justPressed(padConfig.Down) || justPressed(padConfig.Right)) {
-            moveMenuFocus(1);
-          }
-          if (justPressed(padConfig.Swap)) {
-            if (document.activeElement && document.activeElement.click) {
-              document.activeElement.click();
+          const activeEl = document.activeElement;
+          const isSelect = activeEl && activeEl.tagName === 'SELECT';
+          const isRange = activeEl && activeEl.tagName === 'INPUT' && activeEl.type === 'range';
+          const isCheckbox = activeEl && activeEl.tagName === 'INPUT' && activeEl.type === 'checkbox';
+
+          if (isSelect) {
+            if (justPressed(padConfig.Left)) {
+              if (activeEl.selectedIndex > 0) {
+                activeEl.selectedIndex--;
+                activeEl.dispatchEvent(new Event('change', { bubbles: true }));
+                SE.play('cursorMove');
+              }
+            } else if (justPressed(padConfig.Right)) {
+              if (activeEl.selectedIndex < activeEl.options.length - 1) {
+                activeEl.selectedIndex++;
+                activeEl.dispatchEvent(new Event('change', { bubbles: true }));
+                SE.play('cursorMove');
+              }
+            } else if (justPressed(padConfig.Up)) {
+              moveMenuFocus(-1);
+            } else if (justPressed(padConfig.Down)) {
+              moveMenuFocus(1);
+            }
+          } else if (isRange) {
+            const step = parseFloat(activeEl.step) || 1;
+            const min = parseFloat(activeEl.min) || 0;
+            const max = parseFloat(activeEl.max) || 100;
+            let val = parseFloat(activeEl.value);
+            if (justPressed(padConfig.Left)) {
+              val = Math.max(min, val - step);
+              activeEl.value = val;
+              activeEl.dispatchEvent(new Event('input', { bubbles: true }));
+              activeEl.dispatchEvent(new Event('change', { bubbles: true }));
               SE.play('cursorMove');
+            } else if (justPressed(padConfig.Right)) {
+              val = Math.min(max, val + step);
+              activeEl.value = val;
+              activeEl.dispatchEvent(new Event('input', { bubbles: true }));
+              activeEl.dispatchEvent(new Event('change', { bubbles: true }));
+              SE.play('cursorMove');
+            } else if (justPressed(padConfig.Up)) {
+              moveMenuFocus(-1);
+            } else if (justPressed(padConfig.Down)) {
+              moveMenuFocus(1);
+            }
+          } else {
+            if (justPressed(padConfig.Up) || justPressed(padConfig.Left)) {
+              moveMenuFocus(-1);
+            }
+            if (justPressed(padConfig.Down) || justPressed(padConfig.Right)) {
+              moveMenuFocus(1);
+            }
+          }
+
+          if (justPressed(padConfig.Swap)) {
+            if (activeEl) {
+              if (isCheckbox) {
+                activeEl.checked = !activeEl.checked;
+                activeEl.dispatchEvent(new Event('change', { bubbles: true }));
+                SE.play('cursorMove');
+              } else if (activeEl.click) {
+                activeEl.click();
+                SE.play('cursorMove');
+              }
             }
           }
         }
@@ -1976,7 +2108,8 @@
     }
     function startSingleMode() {
       const mode = document.getElementById('single-mode-select').value;
-      startGame('single_' + mode, 1, mode === 'survival' ? 2 : 1);
+      const initLevel = mode === 'survival' ? (parseInt(document.getElementById('survival-init-level').value) || 1) : 1;
+      startGame('single_' + mode, initLevel, mode === 'survival' ? 2 : 1);
     }
     function backToMainMenu() { 
       document.getElementById('com-menu').style.display = 'none'; 
@@ -2010,19 +2143,17 @@
       SE.play('cursorMove');
     }
 
-    function cycleTarget() {
+    function cycleTarget(dir = 1) {
       if ((isMatchOver && !isPracticeMode) || opponents.length <= 0) return;
-      let next = myTargetIndex + 1;
-      while (next < opponents.length) {
-        if (!opponents[next].engine.gameOver) {
-          myTargetIndex = next;
-          updateTargetUI();
-          SE.play('cursorMove');
-          return;
-        }
-        next++;
-      }
-      myTargetIndex = -1;
+      const validTargets = [-1];
+      opponents.forEach((opp, idx) => {
+        if (opp.engine && !opp.engine.gameOver) validTargets.push(idx);
+      });
+      if (validTargets.length <= 1) return;
+      let currentPos = validTargets.indexOf(myTargetIndex);
+      if (currentPos === -1) currentPos = 0;
+      let nextPos = (currentPos + dir + validTargets.length) % validTargets.length;
+      myTargetIndex = validTargets[nextPos];
       updateTargetUI();
       SE.play('cursorMove');
     }
@@ -2661,6 +2792,12 @@
       startGame('com', level, count); 
     }
 
+    function startComGameFromSlider() {
+      const level = parseInt(document.getElementById('com-level-slider').value) || 2;
+      const count = parseInt(document.getElementById('com-player-count').value) || 2;
+      startGame('com', level, count); 
+    }
+
     function exitGame() {
       if (myEngine && currentMode !== 'single') {
         if (!isMatchOver && !isPracticeMode && !myEngine.gameOver) {
@@ -2694,8 +2831,10 @@
       document.getElementById('menu-overlay').style.display = 'flex';
       
       document.getElementById('room-waiting').style.display = 'none';
-      document.getElementById('main-menu-actions').style.display = 'flex';
       document.getElementById('com-menu').style.display = 'none';
+      document.getElementById('single-menu').style.display = 'none';
+      document.getElementById('ranking-menu').style.display = 'none';
+      document.getElementById('main-menu-actions').style.display = 'flex';
     }
 
     let padState = {}, prevPadState = {};
@@ -2718,9 +2857,12 @@
       if (padConfig.Right !== null && justPressed(padConfig.Right) && myEngine.cursor.x < COLS - 2) { myEngine.cursor.x++; moved = true; }
       
       if (moved) SE.play('cursorMove');
-      if (padConfig.Swap !== null && justPressed(padConfig.Swap)) myEngine.swap(myEngine.cursor.x, myEngine.cursor.y);
-      if (padConfig.Rise !== null) myEngine.isRisingManualPad = padState[padConfig.Rise];
-      if (padConfig.Target !== null && justPressed(padConfig.Target)) cycleTarget();
+      if (padConfig.Swap !== null && padConfig.Swap !== undefined && justPressed(padConfig.Swap)) myEngine.swap(myEngine.cursor.x, myEngine.cursor.y);
+      const isRise1 = padConfig.Rise1 !== null && padConfig.Rise1 !== undefined && padState[padConfig.Rise1];
+      const isRise2 = padConfig.Rise2 !== null && padConfig.Rise2 !== undefined && padState[padConfig.Rise2];
+      myEngine.isRisingManualPad = !!(isRise1 || isRise2);
+      if (padConfig.TargetRight !== null && padConfig.TargetRight !== undefined && justPressed(padConfig.TargetRight)) cycleTarget(1);
+      if (padConfig.TargetLeft !== null && padConfig.TargetLeft !== undefined && justPressed(padConfig.TargetLeft)) cycleTarget(-1);
     }
 
     function updateGarbagePreview(engine, containerId) {
@@ -2947,12 +3089,15 @@
         
         if (moved) SE.play('cursorMove');
         if (code === keyConfig.Swap) { e.preventDefault(); myEngine.swap(myEngine.cursor.x, myEngine.cursor.y); }
-        if (code === keyConfig.Rise) { e.preventDefault(); myEngine.isRisingManualKey = true; }
-        if (code === keyConfig.Target) { e.preventDefault(); cycleTarget(); }
+        if (code === keyConfig.Rise1 || code === keyConfig.Rise2) { e.preventDefault(); myEngine.isRisingManualKey = true; }
+        if (code === keyConfig.TargetRight) { e.preventDefault(); cycleTarget(1); }
+        if (code === keyConfig.TargetLeft) { e.preventDefault(); cycleTarget(-1); }
       });
 
       window.addEventListener('keyup', (e) => {
-        if (myEngine && e.code === keyConfig.Rise) myEngine.isRisingManualKey = false;
+        if (myEngine && (e.code === keyConfig.Rise1 || e.code === keyConfig.Rise2)) {
+          myEngine.isRisingManualKey = false;
+        }
       });
     }
 
@@ -3077,6 +3222,8 @@
       document.getElementById('countdown-overlay').style.display = 'none';
 
       const maxPlayers = parseInt(document.getElementById('online-max-players').value);
+      const comLvl = parseInt(document.getElementById('online-com-level')?.value) || 3;
+      currentComLevel = comLvl;
       let players = [{ id: 'host', type: 'player', name: 'HOST' }];
       
       onlineConnections.forEach((c, idx) => {
@@ -3087,7 +3234,7 @@
 
       const currentCount = players.length;
       for(let i = 0; i < maxPlayers - currentCount; i++) {
-        players.push({ id: `com_${i}`, type: 'com', level: currentComLevel, name: `COM ${i+1}` });
+        players.push({ id: `com_${i}`, type: 'com', level: comLvl, name: `COM ${i+1}` });
       }
 
       matchPlayersConfig = players;
@@ -3475,12 +3622,36 @@
     // ==========================================
     // 自動リサイズ・対戦人数別レイアウト
     // ==========================================
+    let useMobileLayoutInLandscape = localStorage.getItem('pdw_mobile_layout') === 'true';
+
+    function toggleLandscapeLayout() {
+      useMobileLayoutInLandscape = !useMobileLayoutInLandscape;
+      localStorage.setItem('pdw_mobile_layout', useMobileLayoutInLandscape);
+      updateLayoutToggleBtnText();
+      adjustLayout();
+    }
+
+    function updateLayoutToggleBtnText() {
+      const btn = document.getElementById('layout-toggle-btn');
+      if (btn) {
+        btn.innerText = useMobileLayoutInLandscape ? 'UI: 縦型' : 'UI: 横並び';
+      }
+    }
+
     function adjustLayout() {
       const isPortrait = window.innerHeight > window.innerWidth;
       const W = window.innerWidth;
       const H = window.innerHeight;
       const isLeft = document.getElementById('handedness-toggle')?.checked;
-      const isLandscapeLarge = W >= 900 && !isPortrait;
+
+      const layoutBtn = document.getElementById('layout-toggle-btn');
+      if (layoutBtn) {
+        layoutBtn.style.display = !isPortrait ? 'block' : 'none';
+        updateLayoutToggleBtnText();
+      }
+
+      // 横画面時は、ユーザーが縦型UIを明示的に選択していない限りPC・タブレット同様の横並びレイアウトを適用
+      const isLandscapeLarge = !isPortrait && !useMobileLayoutInLandscape;
       const oppCount = opponents.length;
 
       const myWrapper = document.getElementById('my-wrapper');
