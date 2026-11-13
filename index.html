@@ -377,7 +377,7 @@
           </div>
           <div style="font-size: 0.85rem; color: #4ecca3; display: flex; align-items: center; justify-content: space-between; width: 240px; background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 10px;">
             <span>不足COM強さ: <b style="color:#ff007f;">Lv.<span id="online-com-level-val">3</span></b></span>
-            <input type="range" id="online-com-level" min="1" max="10" step="1" value="3" style="width:90px;" oninput="document.getElementById('online-com-level-val').innerText = this.value">
+            <input type="range" id="online-com-level" min="1" max="99" step="1" value="3" style="width:90px;" oninput="document.getElementById('online-com-level-val').innerText = this.value">
           </div>
           <div style="display:flex; gap:10px;">
             <button class="btn" style="min-width:115px; padding:10px 16px; font-size:1rem;" onclick="createRoom()">部屋を作る</button>
@@ -412,7 +412,7 @@
       <div id="survival-settings" style="display:none; flex-direction:column; gap:8px; font-size:0.8rem; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; width: 260px; text-align: left;">
         <div style="display:flex; align-items:center; justify-content:space-between;">
           <span style="color:#4ecca3;">初期COM強さ: <b style="color:#ff007f;">Lv.<span id="survival-init-level-val">1</span></b></span>
-          <input type="range" id="survival-init-level" min="1" max="10" step="1" value="1" style="width:110px;" oninput="document.getElementById('survival-init-level-val').innerText = this.value">
+          <input type="range" id="survival-init-level" min="1" max="99" step="1" value="1" style="width:110px;" oninput="document.getElementById('survival-init-level-val').innerText = this.value">
         </div>
         <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="survival-clear-garbage" checked> COM撃破時に予告お邪魔を無効化</label>
         <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="survival-cancel-sent" checked> 次COMへのお邪魔持ち越しを無効化</label>
@@ -453,11 +453,11 @@
           <span>CPU強さ:</span>
           <span style="font-weight:bold; color:#ff007f;">Lv.<span id="com-level-display">2</span></span>
         </div>
-        <input type="range" id="com-level-slider" min="1" max="10" step="1" value="2" style="width:100%;" oninput="document.getElementById('com-level-display').innerText = this.value">
+        <input type="range" id="com-level-slider" min="1" max="99" step="1" value="2" style="width:100%;" oninput="document.getElementById('com-level-display').innerText = this.value">
         <div style="display:flex; justify-content:space-between; width:100%; font-size:0.75rem; color:#888;">
           <span>1:やさしい</span>
-          <span>5:ふつう</span>
-          <span>10:げきむず</span>
+          <span>50:ふつう</span>
+          <span>99:げきむず</span>
         </div>
       </div>
       <button class="btn" onclick="startComGameFromSlider()">スタート</button>
@@ -582,14 +582,21 @@
         this.startTime = 0;
         this.pauseTime = 0;
         this._isManualStop = false;
+        this._playRequestId = 0;
+        this._loadingPromise = null;
+        this._loadingSrc = null;
       }
       
       get src() { return this._src; }
       set src(value) {
         if (this._src !== value) {
+          this.pause();
+          this._playRequestId++;
           this._src = value;
           this.pauseTime = 0;
           this.buffer = null; // 新しいsrcになったらバッファクリア
+          this._loadingPromise = null;
+          this._loadingSrc = null;
         }
       }
       
@@ -620,9 +627,12 @@
         return this.pauseTime;
       }
       set currentTime(v) {
-        this.pauseTime = v;
-        if (this.isPlaying) {
+        const wasPlaying = this.isPlaying;
+        if (wasPlaying) {
           this.pause();
+        }
+        this.pauseTime = v;
+        if (wasPlaying) {
           this.play().catch(()=>{});
         }
       }
@@ -636,33 +646,60 @@
       async load() {
         if (!this._src) return;
         if (this.buffer) return;
-        try {
-          // File API等で生成されたBlob(ObjectURL)も正常にfetch可能
-          const response = await fetch(this._src);
-          const arrayBuffer = await response.arrayBuffer();
-          this.buffer = await this.ctx.decodeAudioData(arrayBuffer);
-        } catch (e) {
-          console.warn('BGM Load Error:', e);
-          this.buffer = null;
+        if (this._loadingPromise && this._loadingSrc === this._src) {
+          return this._loadingPromise;
         }
+        const targetSrc = this._src;
+        this._loadingSrc = targetSrc;
+        this._loadingPromise = (async () => {
+          try {
+            // File API等で生成されたBlob(ObjectURL)も正常にfetch可能
+            const response = await fetch(targetSrc);
+            const arrayBuffer = await response.arrayBuffer();
+            const decoded = await this.ctx.decodeAudioData(arrayBuffer);
+            if (this._src === targetSrc) {
+              this.buffer = decoded;
+            }
+          } catch (e) {
+            console.warn('BGM Load Error:', e);
+            if (this._src === targetSrc) {
+              this.buffer = null;
+            }
+          } finally {
+            if (this._loadingSrc === targetSrc) {
+              this._loadingPromise = null;
+            }
+          }
+        })();
+        return this._loadingPromise;
       }
       
       async play() {
-        if (this.ctx.state === 'suspended') await this.ctx.resume();
-        if (!this.buffer) await this.load();
+        const reqId = ++this._playRequestId;
+        if (this.ctx.state === 'suspended') {
+          await this.ctx.resume();
+          if (reqId !== this._playRequestId) return Promise.resolve();
+        }
+        if (!this.buffer) {
+          await this.load();
+          if (reqId !== this._playRequestId) return Promise.resolve();
+        }
         if (!this.buffer) return Promise.resolve();
         
-        if (this.isPlaying) this.pause();
+        if (this.isPlaying) this.pause(false);
+        if (reqId !== this._playRequestId) return Promise.resolve();
         
         this.source = this.ctx.createBufferSource();
         this.source.buffer = this.buffer;
         this.source.loop = this.loop;
         this.source.connect(this.gainNode);
         
-        this.source.onended = () => {
-          if (!this._isManualStop) {
+        const currentSource = this.source;
+        currentSource.onended = () => {
+          if (this.source === currentSource && !this._isManualStop) {
             this.isPlaying = false;
             this.pauseTime = 0;
+            this.source = null;
             if (this.onended) this.onended(); // 再生終了でイベント発火（プレイリスト遷移等）
           }
         };
@@ -676,17 +713,22 @@
           this.pauseTime = 0;
         }
         
-        this.source.start(0, offset);
+        currentSource.start(0, offset);
         this.isPlaying = true;
         this.updateGain();
         return Promise.resolve();
       }
       
-      pause() {
+      pause(invalidateRequest = true) {
+        if (invalidateRequest) {
+          this._playRequestId++;
+        }
         if (this.isPlaying && this.source) {
           this._isManualStop = true;
-          this.source.stop();
-          this.source.disconnect();
+          const oldSource = this.source;
+          oldSource.onended = null;
+          try { oldSource.stop(); } catch (e) {}
+          try { oldSource.disconnect(); } catch (e) {}
           this.pauseTime += (this.ctx.currentTime - this.startTime);
           if (this.buffer && this.pauseTime >= this.buffer.duration) {
              this.pauseTime = 0;
@@ -804,12 +846,14 @@
     function stopBgm() {
       isBgmIntendedToPlay = false;
       isBgmPlaying = false;
+      isPanic = false;
       bgmAudio.pause();
       panicBgmAudio.pause();
     }
 
     function readyBgm() {
       isBgmIntendedToPlay = false;
+      isBgmPlaying = false;
       
       if (bgmPlaylist.length > 0) {
         const expectedFile = bgmPlaylist[currentBgmIndex];
@@ -825,8 +869,8 @@
         bgmAudio.loop = true;
       }
 
-      bgmAudio.load();
-      panicBgmAudio.load();
+      bgmAudio.pause();
+      panicBgmAudio.pause();
       bgmAudio.currentTime = 0;
       panicBgmAudio.currentTime = 0;
       isPanic = false;
@@ -836,33 +880,13 @@
       panicBgmAudio.volume = bgmVol;
       bgmAudio.muted = true;
       panicBgmAudio.muted = true;
-      
-      const p1 = bgmAudio.play();
-      if (p1 !== undefined) {
-        p1.then(() => {
-          if (!isBgmIntendedToPlay) {
-            bgmAudio.pause();
-            bgmAudio.currentTime = 0;
-          } else {
-            bgmAudio.muted = isPanic;
-          }
-        }).catch(e => console.warn(e));
-      }
 
-      const p2 = panicBgmAudio.play();
-      if (p2 !== undefined) {
-        p2.then(() => {
-          if (!isBgmIntendedToPlay) {
-            panicBgmAudio.pause();
-            panicBgmAudio.currentTime = 0;
-          } else {
-            panicBgmAudio.muted = !isPanic;
-          }
-        }).catch(e => console.warn(e));
-      }
+      bgmAudio.load();
+      panicBgmAudio.load();
     }
 
     function resumeBgm() {
+      if (matchState !== 'playing' || document.getElementById('game-area').style.display === 'none') return;
       isBgmIntendedToPlay = true;
       isBgmPlaying = true;
       let bgmVol = parseFloat(document.getElementById('bgm-volume').value);
@@ -873,7 +897,10 @@
       panicBgmAudio.muted = !isPanic;
 
       bgmAudio.play().catch(e => console.warn(e));
-      panicBgmAudio.play().catch(e => console.warn(e));
+      if (isPanic) {
+        panicBgmAudio.currentTime = 0;
+        panicBgmAudio.play().catch(e => console.warn(e));
+      }
     }
 
     // --- コンフィグ・ゲームパッド管理 ---
@@ -882,7 +909,8 @@
       GrabLeft: 'カーソル左つかみ', GrabRight: 'カーソル右つかみ',
       ToggleContinuous: '連続移動オンオフ',
       Rise1: 'せり上げ1', Rise2: 'せり上げ2',
-      TargetRight: '標的(右)', TargetLeft: '標的(左)'
+      TargetRight: '標的(右)', TargetLeft: '標的(左)',
+      Pause: 'ポーズ/退出'
     };
 
     let keyConfig = {
@@ -891,7 +919,8 @@
       GrabLeft: 'KeyZ', GrabRight: 'KeyX',
       ToggleContinuous: 'KeyC',
       Rise1: 'ShiftLeft', Rise2: 'ShiftRight',
-      TargetRight: 'KeyE', TargetLeft: 'KeyQ'
+      TargetRight: 'KeyE', TargetLeft: 'KeyQ',
+      Pause: 'Escape'
     };
     let padConfig = {
       Up: 12, Down: 13, Left: 14, Right: 15,
@@ -899,7 +928,8 @@
       GrabLeft: 2, GrabRight: 1,
       ToggleContinuous: 3,
       Rise1: 5, Rise2: 7,
-      TargetRight: 5, TargetLeft: 4
+      TargetRight: 5, TargetLeft: 4,
+      Pause: 9
     };
     
     try {
@@ -1103,11 +1133,22 @@
     // ==========================================
     // ゲームエンジン
     // ==========================================
+    function createSeededRng(seed) {
+      let s = seed >>> 0;
+      return function() {
+        s += 0x6D2B79F5;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
     class PonEngine {
-      constructor(onStateChange, onSendGarbage, handicap = 3, isPlayer = true) {
+      constructor(onStateChange, onSendGarbage, handicap = 3, isPlayer = true, seed = null) {
         this.cols = COLS; this.rows = ROWS;
         this.handicap = handicap;
         this.isPlayer = isPlayer; 
+        this.boardRng = createSeededRng(seed !== null ? seed : Math.floor(Math.random() * 0xFFFFFFFF));
         this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
         this.nextRow = []; 
         this.riseOffset = 0; 
@@ -1128,6 +1169,7 @@
         this.garbageQueue = [];
         this.onStateChange = onStateChange;
         this.onSendGarbage = onSendGarbage;
+        this.onRowPushed = null;
         
         this.isRisingManualBtn = false;
         this.isRisingManualKey = false;
@@ -1148,7 +1190,7 @@
         candidateConfigs.forEach(conf => {
           totalWeight += conf.isSpecial ? 1 : 4;
         });
-        let rnd = Math.random() * totalWeight;
+        let rnd = this.boardRng() * totalWeight;
         for (const conf of candidateConfigs) {
           const w = conf.isSpecial ? 1 : 4;
           if (rnd < w) return conf.id;
@@ -1207,8 +1249,8 @@
            this.grid[r][c+1].swapAnim = { dir: 1, timer: 6 };
         }
 
-        if (this.grid[r][c] && r+1 < this.rows && this.grid[r+1][c] === null) { this.grid[r][c].state = 'hover'; this.grid[r][c].timer = 12; }
-        if (this.grid[r][c+1] && r+1 < this.rows && this.grid[r+1][c+1] === null) { this.grid[r][c+1].state = 'hover'; this.grid[r][c+1].timer = 12; }
+        if (this.grid[r][c] && r+1 < this.rows && this.grid[r+1][c] === null) { this.grid[r][c].state = 'hover'; this.grid[r][c].timer = 14; }
+        if (this.grid[r][c+1] && r+1 < this.rows && this.grid[r+1][c+1] === null) { this.grid[r][c+1].state = 'hover'; this.grid[r][c+1].timer = 14; }
 
         this.checkMatches();
         return true;
@@ -1227,6 +1269,8 @@
         for (let r = 0; r < this.rows - 1; r++) this.grid[r] = this.grid[r + 1];
         this.grid[this.rows - 1] = this.nextRow;
         this.nextRow = this.createNextRow();
+        if (this.cursor.y > 0) this.cursor.y--;
+        if (this.onRowPushed) this.onRowPushed();
         this.checkMatches(); 
       }
 
@@ -1323,7 +1367,7 @@
             let isGroupBottom = (item.r === groupMaxR[item.b.groupId]);
             
             item.b.state = 'transforming';
-            item.b.transformDelay = idx * 8;
+            item.b.transformDelay = Math.round(idx * 8 * 1.15);
             item.b.isTarget = isGroupBottom;
             item.b.transformToNormal = isGroupBottom && !item.b.isHard;
             item.b.transformGroupId = transformGroupId;
@@ -1379,11 +1423,11 @@
               if (b.state === 'transformed_wait' || b.state === 'transforming_wait') {
                 if (typeof b.type === 'number') {
                   b.state = 'hover';
-                  b.timer = 15;
+                  b.timer = 17;
                   delete b.groupId; 
                 } else {
                   b.state = 'hover'; 
-                  b.timer = 10; 
+                  b.timer = 12; 
                 }
                 delete b.transformGroupId;
               }
@@ -1412,7 +1456,7 @@
                   b.state = 'transformed_wait';
                 } else {
                   b.state = 'transforming_wait';
-                  b.particleTimer = 30;
+                  b.particleTimer = 35;
                 }
 
                 if (!playedGarbageSE) {
@@ -1492,7 +1536,7 @@
                   const ub = this.grid[ur][c];
                   if (ub && ub.type !== 'garbage' && ub.state !== 'match') {
                     ub.state = 'hover';
-                    ub.timer = 15;
+                    ub.timer = 17;
                     ub.chainEligible = true;
                   } else {
                     break;
@@ -1590,7 +1634,7 @@
             if (!supported) {
               cells.forEach(item => {
                 item.block.state = 'hover';
-                item.block.timer = 10;
+                item.block.timer = 12;
               });
             }
           }
@@ -1631,7 +1675,7 @@
 
               if (leader.state === 'normal') {
                 leader.state = 'hover';
-                leader.timer = 12;
+                leader.timer = 14;
               }
 
               for (const item of stack) item.block.state = leader.state;
@@ -1728,7 +1772,7 @@
             const block = this.grid[r][c];
             if (block.chainEligible) chainActive = true;
             if (COLORS.find(col => col.id === block.type)?.isSpecial) hasSpecial = true;
-            block.state = 'match'; block.timer = 40;
+            block.state = 'match'; block.timer = 46;
           });
 
           if (chainActive) this.chain++; else this.chain = 1;
@@ -1905,14 +1949,14 @@
                 }
 
                 if (b.state === 'transforming') {
-                  if (b.transformDelay < 11) {
-                    ctx.fillStyle = `rgba(255, 255, 255, ${(11 - b.transformDelay) / 11})`;
+                  if (b.transformDelay < 13) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${(13 - b.transformDelay) / 13})`;
                     ctx.fillRect(x, y, CELL_PX, CELL_PX);
                   }
                 }
                 
                 if (b.particleTimer > 0) {
-                  ctx.fillStyle = `rgba(255, 255, 255, ${b.particleTimer / 30})`;
+                  ctx.fillStyle = `rgba(255, 255, 255, ${b.particleTimer / 35})`;
                   ctx.fillRect(x, y, CELL_PX, CELL_PX);
                 }
               } else {
@@ -2236,9 +2280,31 @@
       const mode = document.getElementById('single-mode-select').value;
       document.getElementById('survival-settings').style.display = (mode === 'survival') ? 'flex' : 'none';
     }
+    let survivalBaseLevel = 1;
+
+    function getSurvivalLevel(initLv, matchNum) {
+      const stage = Math.floor((matchNum - 1) / 5);
+      const rawMin = matchNum <= 5 ? initLv : (matchNum <= 10 ? initLv + 5 : initLv);
+      const rawMax = initLv + stage * 5 + 4;
+      let minLv, maxLv;
+      if (rawMax <= 99) {
+        minLv = rawMin;
+        maxLv = rawMax;
+      } else {
+        maxLv = 99;
+        const overSteps = Math.ceil((rawMax - 99) / 5);
+        minLv = Math.max(1, initLv - overSteps * 5);
+      }
+      return Math.floor(Math.random() * (maxLv - minLv + 1)) + minLv;
+    }
+
     function startSingleMode() {
       const mode = document.getElementById('single-mode-select').value;
-      const initLevel = mode === 'survival' ? (parseInt(document.getElementById('survival-init-level').value) || 1) : 1;
+      let initLevel = 1;
+      if (mode === 'survival') {
+        survivalBaseLevel = parseInt(document.getElementById('survival-init-level').value) || 1;
+        initLevel = getSurvivalLevel(survivalBaseLevel, 1);
+      }
       startGame('single_' + mode, initLevel, mode === 'survival' ? 2 : 1);
     }
     function backToMainMenu() { 
@@ -2701,7 +2767,16 @@
       });
     }
 
+    let readyGoTimers = [];
+    function clearReadyGoTimers() {
+      readyGoTimers.forEach(id => clearTimeout(id));
+      readyGoTimers = [];
+      const overlay = document.getElementById('ready-go-overlay');
+      if (overlay) overlay.style.display = 'none';
+    }
+
     function showReadyGo() {
+      clearReadyGoTimers();
       const overlay = document.getElementById('ready-go-overlay');
       const text = document.getElementById('ready-go-text');
       overlay.style.display = 'flex';
@@ -2720,7 +2795,8 @@
         });
       });
 
-      setTimeout(() => {
+      const t1 = setTimeout(() => {
+        if (matchState === 'gameover' || document.getElementById('game-area').style.display === 'none') return;
         text.style.transition = 'none';
         text.style.opacity = '0';
         text.style.transform = 'scale(1.5)';
@@ -2738,16 +2814,19 @@
         matchState = 'playing';
         resumeBgm();
 
-        setTimeout(() => {
+        const t2 = setTimeout(() => {
           text.style.transition = 'all 0.3s ease-in';
           text.style.opacity = '0';
           text.style.transform = 'scale(2)';
-          setTimeout(() => {
+          const t3 = setTimeout(() => {
             overlay.style.display = 'none';
           }, 300);
+          readyGoTimers.push(t3);
         }, 800);
+        readyGoTimers.push(t2);
 
-      }, 1500); 
+      }, 1500);
+      readyGoTimers.push(t1);
     }
 
     function checkPanic() {
@@ -2790,9 +2869,13 @@
       if (toPanic) {
         bgmAudio.muted = true;
         panicBgmAudio.muted = false;
-        panicBgmAudio.currentTime = 0; 
+        panicBgmAudio.pause();
+        panicBgmAudio.currentTime = 0;
+        panicBgmAudio.play().catch(e => console.warn(e));
       } else {
         panicBgmAudio.muted = true;
+        panicBgmAudio.pause();
+        panicBgmAudio.currentTime = 0;
         bgmAudio.muted = false;
       }
     }
@@ -2829,6 +2912,7 @@
       currentSurvivalWins = 0;
       
       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
+      const sharedSeed = Math.floor(Math.random() * 0xFFFFFFFF);
       
       myRenderer = new BoardRenderer('my-canvas'); 
       myEngine = new PonEngine(
@@ -2841,8 +2925,10 @@
           distributeGarbage('player', totalBlocks, isHard);
         },
         handicap,
-        true
+        true,
+        sharedSeed
       );
+      myEngine.onRowPushed = handleMyRowPushed;
       myEngine.garbageQueue = [];
       if (currentMode === 'single_survival' && document.getElementById('survival-keep-speed').checked) {
          myEngine.keepSpeed = true;
@@ -2890,7 +2976,8 @@
             (state) => { if (state === 'gameover') checkMatchEnd(); },
             (totalBlocks, isHard) => { distributeGarbage(oppId, totalBlocks, isHard); },
             3,
-            false
+            false,
+            sharedSeed
           );
           rEngine.garbageQueue = [];
           rAI = new ComAI(rEngine, currentComLevel, oppId);
@@ -2941,6 +3028,7 @@
       matchState = 'gameover';
       isPracticeMode = false;
       hostDisconnected = false;
+      clearReadyGoTimers();
       stopAllEngines();
       stopBgm();
       
@@ -3021,8 +3109,16 @@
     let padState = {}, prevPadState = {};
     let padHoldFrames = { Up: 0, Down: 0, Left: 0, Right: 0 };
     let padGrabState = { active: false, side: 'left', col: 0, row: 0, consumed: false };
+    let keyGrabState = { active: false, side: 'left', col: 0, row: 0, consumed: false };
+    let touchRowFollowCallback = null;
     const PAD_DAS_FRAMES = 15;
     const PAD_ARR_FRAMES = 4;
+
+    function handleMyRowPushed() {
+      if (padGrabState.active && padGrabState.row > 0) padGrabState.row--;
+      if (keyGrabState.active && keyGrabState.row > 0) keyGrabState.row--;
+      if (touchRowFollowCallback) touchRowFollowCallback();
+    }
 
     function pollGamepadInput() {
       const pad = navigator.getGamepads()[0];
@@ -3037,6 +3133,16 @@
       pad.buttons.forEach((b, i) => padState[i] = b.pressed);
       const justPressed = (btnIdx) => btnIdx !== null && btnIdx !== undefined && padState[btnIdx] && !prevPadState[btnIdx];
       const isPressed = (btnIdx) => btnIdx !== null && btnIdx !== undefined && !!padState[btnIdx];
+
+      if (justPressed(padConfig.Pause)) {
+        if (document.getElementById('game-area').style.display === 'flex' && document.getElementById('result-overlay').style.display !== 'flex') {
+          padHoldFrames = { Up: 0, Down: 0, Left: 0, Right: 0 };
+          padGrabState.active = false;
+          padGrabState.consumed = false;
+          exitGame();
+          return;
+        }
+      }
 
       if (!myEngine || (isMatchOver && !isPracticeMode)) {
         padHoldFrames = { Up: 0, Down: 0, Left: 0, Right: 0 };
@@ -3210,9 +3316,7 @@
                    opp.engine.garbageQueue = [];
                  }
                  let n = currentSurvivalWins + 1;
-                 let minLv = n <= 5 ? 0 : (n <= 10 ? 5 : 0);
-                 let maxLv = n <= 10 ? (n <= 5 ? 4 : 9) : (Math.floor((n - 1) / 5) * 5 + 4);
-                 let nextLv = Math.floor(Math.random() * (maxLv - minLv + 1)) + minLv;
+                 let nextLv = getSurvivalLevel(survivalBaseLevel, n);
                  opp.level = nextLv;
                  opp.ai = new ComAI(opp.engine, nextLv, opp.id);
                  document.getElementById(`rival-name-label-0`).innerHTML = `COM Lv.${nextLv} <span class="target-badge">🎯 TARGET</span>`;
@@ -3269,6 +3373,9 @@
 
       const cvs = document.getElementById('my-canvas');
       let isDown = false, grabbedCol = -1, grabbedRow = -1, initialCanvasX = 0, initialCanvasY = 0;
+      touchRowFollowCallback = () => {
+        if (isDown && grabbedRow > 0) grabbedRow--;
+      };
 
       cvs.addEventListener('pointerdown', (e) => {
         if (isMatchOver && !isPracticeMode) return;
@@ -3337,8 +3444,6 @@
         riseBtn.addEventListener(ev, () => { if(myEngine) myEngine.isRisingManualBtn = false; });
       });
 
-      let keyGrabState = { active: false, side: 'left', col: 0, row: 0, consumed: false };
-
       window.addEventListener('blur', () => {
         keyGrabState.active = false;
         keyGrabState.consumed = false;
@@ -3353,8 +3458,18 @@
           renderConfigUI();
           return;
         }
-        if (!myEngine || (isMatchOver && !isPracticeMode)) return;
         const code = e.code;
+        if (code === keyConfig.Pause && !e.repeat) {
+          if (document.getElementById('game-area').style.display === 'flex' && document.getElementById('result-overlay').style.display !== 'flex') {
+            e.preventDefault();
+            keyGrabState.active = false;
+            keyGrabState.consumed = false;
+            if (myEngine) myEngine.isRisingManualKey = false;
+            exitGame();
+            return;
+          }
+        }
+        if (!myEngine || (isMatchOver && !isPracticeMode)) return;
         let moved = false;
 
         if (code === keyConfig.ToggleContinuous) {
@@ -3577,14 +3692,15 @@
       
       const configBase = matchPlayersConfig.map(pl => ({ id: pl.id, type: pl.type, level: pl.level, name: pl.name }));
       const matchId = Date.now();
+      const sharedSeed = Math.floor(Math.random() * 0xFFFFFFFF);
       
       onlineConnections.forEach(c => {
         const cId = c._clientId;
-        const config = { players: configBase, myId: cId, matchId: matchId };
+        const config = { players: configBase, myId: cId, matchId: matchId, seed: sharedSeed };
         if (c.open) c.send({ type: 'prepare_match', config });
       });
       
-      const hostConfig = { players: configBase, myId: 'host', matchId: matchId };
+      const hostConfig = { players: configBase, myId: 'host', matchId: matchId, seed: sharedSeed };
       prepareMatchLocal(hostConfig);
     }
 
@@ -3669,14 +3785,17 @@
       });
 
       const handicap = parseInt(document.getElementById('handicap-val').value) || 3;
+      const sharedSeed = config.seed !== undefined ? config.seed : Math.floor(Math.random() * 0xFFFFFFFF);
 
       myRenderer = new BoardRenderer('my-canvas');
       myEngine = new PonEngine(
         (state) => { if (state === 'gameover') checkMatchEnd(); },
         (totalBlocks, isHard) => { distributeGarbageOnline(myOnlineId, totalBlocks, isHard); },
         handicap,
-        true
+        true,
+        sharedSeed
       );
+      myEngine.onRowPushed = handleMyRowPushed;
       myEngine.garbageQueue = [];
 
       const rivalsArea = document.getElementById('rivals-area');
@@ -3727,12 +3846,13 @@
             },
             (totalBlocks, isHard) => { distributeGarbageOnline(p.id, totalBlocks, isHard); },
             3,
-            false
+            false,
+            sharedSeed
           );
           rEngine.garbageQueue = [];
           rAI = new ComAI(rEngine, p.level || 2, p.id);
         } else {
-          rEngine = new PonEngine(null, null, 3, false);
+          rEngine = new PonEngine(null, null, 3, false, sharedSeed);
           rEngine.garbageQueue = [];
         }
 
