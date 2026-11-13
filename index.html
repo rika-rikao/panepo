@@ -52,32 +52,148 @@
     @media (orientation: landscape) and (max-height: 580px) {
       #menu-overlay {
         justify-content: flex-start;
-        padding: 10px 15px;
-        gap: 8px;
+        padding: 8px 12px;
+        gap: 6px;
+      }
+      #menu-overlay > * {
+        flex-shrink: 0;
       }
       .title {
-        font-size: 1.6rem;
-        margin-bottom: 2px;
+        font-size: 1.45rem;
+        margin-bottom: 0;
       }
       #main-menu {
-        max-width: 580px !important;
-        gap: 8px !important;
+        max-width: 600px !important;
+        gap: 6px !important;
+      }
+      #main-menu > div:first-of-type {
+        margin-bottom: 0 !important;
+        font-size: 0.85rem !important;
       }
       #main-menu-actions {
-        display: grid !important;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        gap: 6px !important;
         width: 100% !important;
       }
-      #main-menu-actions .btn {
-        min-width: unset;
-        width: 100%;
-        padding: 8px 12px;
-        font-size: 0.95rem;
+      #main-menu-actions > .btn {
+        min-width: unset !important;
+        width: calc(50% - 4px) !important;
+        padding: 7px 10px !important;
+        font-size: 0.9rem !important;
+      }
+      #main-menu-actions > div[style*="border-top"] {
+        display: none !important;
       }
       .online-menu-section {
-        grid-column: span 2;
+        width: 100% !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 6px 10px !important;
+        border-top: 1px solid rgba(255,255,255,0.2);
+        padding-top: 6px;
+      }
+      #peer-room-id {
+        width: 165px !important;
+        padding: 6px 10px !important;
+        font-size: 0.85rem !important;
+      }
+      .online-menu-section > div:nth-of-type(2) {
+        width: auto !important;
+        gap: 6px;
+        padding: 4px 8px !important;
+      }
+      .online-menu-section .btn {
+        min-width: 110px !important;
+        width: auto !important;
+        padding: 6px 14px !important;
+        font-size: 0.9rem !important;
+      }
+      #room-waiting {
+        max-width: 480px !important;
+        padding: 10px 14px !important;
+        gap: 5px !important;
+        margin-top: 2px !important;
+      }
+      #room-waiting .btn {
+        margin-top: 2px !important;
+        padding: 7px 14px !important;
+        font-size: 0.9rem !important;
+        min-width: 160px;
+      }
+      #single-menu {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        max-width: 560px !important;
+        gap: 6px 10px !important;
+      }
+      #single-menu > h2 {
         width: 100%;
+        text-align: center;
+        font-size: 1.15rem;
+        margin: 0;
+      }
+      #single-menu > div:nth-of-type(1) {
+        width: 100%;
+        justify-content: center;
+      }
+      #survival-settings {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        width: 100% !important;
+        max-width: 520px;
+        gap: 4px 10px !important;
+        padding: 6px 10px !important;
+      }
+      #survival-settings > div, #survival-settings > label {
+        flex: 1 1 46%;
+        font-size: 0.78rem;
+      }
+      #single-menu > .btn,
+      #com-menu > .btn,
+      #ranking-menu > .btn {
+        min-width: 140px !important;
+        width: auto !important;
+        padding: 7px 18px !important;
+        font-size: 0.9rem !important;
+      }
+      #com-menu {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        max-width: 520px !important;
+        gap: 6px 10px !important;
+      }
+      #com-menu > h2 {
+        width: 100%;
+        text-align: center;
+        font-size: 1.15rem;
+        margin: 0;
+      }
+      #com-menu > div {
+        max-width: 480px;
+      }
+      #ranking-menu {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        max-width: 540px !important;
+        gap: 6px 12px !important;
+      }
+      #ranking-menu > h2 {
+        font-size: 1.15rem;
+        margin: 0;
+      }
+      #ranking-list {
+        flex-basis: 100%;
+        max-width: 460px !important;
+        line-height: 1.45 !important;
+        padding: 6px 12px !important;
+        font-size: 0.85rem !important;
       }
     }
     
@@ -763,18 +879,26 @@
     // --- コンフィグ・ゲームパッド管理 ---
     const ACTION_LABELS = {
       Up: '上', Down: '下', Left: '左', Right: '右', Swap: '入替',
+      GrabLeft: 'カーソル左つかみ', GrabRight: 'カーソル右つかみ',
+      ToggleContinuous: '連続移動オンオフ',
       Rise1: 'せり上げ1', Rise2: 'せり上げ2',
       TargetRight: '標的(右)', TargetLeft: '標的(左)'
     };
 
     let keyConfig = {
       Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight',
-      Swap: 'Space', Rise1: 'ShiftLeft', Rise2: 'ShiftRight',
+      Swap: 'Space',
+      GrabLeft: 'KeyZ', GrabRight: 'KeyX',
+      ToggleContinuous: 'KeyC',
+      Rise1: 'ShiftLeft', Rise2: 'ShiftRight',
       TargetRight: 'KeyE', TargetLeft: 'KeyQ'
     };
     let padConfig = {
       Up: 12, Down: 13, Left: 14, Right: 15,
-      Swap: 0, Rise1: 5, Rise2: 7,
+      Swap: 0,
+      GrabLeft: 2, GrabRight: 1,
+      ToggleContinuous: 3,
+      Rise1: 5, Rise2: 7,
       TargetRight: 5, TargetLeft: 4
     };
     
@@ -784,13 +908,17 @@
         const parsedKey = JSON.parse(sKey);
         if (parsedKey.Rise && !parsedKey.Rise1) parsedKey.Rise1 = parsedKey.Rise;
         if (parsedKey.Target && !parsedKey.TargetRight) parsedKey.TargetRight = parsedKey.Target;
-        keyConfig = { ...keyConfig, ...parsedKey };
+        Object.keys(keyConfig).forEach(k => {
+          if (parsedKey[k] !== undefined) keyConfig[k] = parsedKey[k];
+        });
       }
       if (sPad) {
         const parsedPad = JSON.parse(sPad);
         if (parsedPad.Rise !== undefined && parsedPad.Rise1 === undefined) parsedPad.Rise1 = parsedPad.Rise;
         if (parsedPad.Target !== undefined && parsedPad.TargetRight === undefined) parsedPad.TargetRight = parsedPad.Target;
-        padConfig = { ...padConfig, ...parsedPad };
+        Object.keys(padConfig).forEach(k => {
+          if (parsedPad[k] !== undefined) padConfig[k] = parsedPad[k];
+        });
       }
     } catch(e) {}
 
@@ -833,19 +961,21 @@
     function renderConfigUI() {
       const list = document.getElementById('key-config-list');
       list.innerHTML = '';
-      Object.keys(keyConfig).forEach(action => {
+      Object.keys(ACTION_LABELS).forEach(action => {
         const row = document.createElement('div');
-        row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center';
+        row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center'; row.style.gap = '6px';
         
         const lbl = document.createElement('span'); 
-        lbl.innerText = ACTION_LABELS[action] || action; 
-        lbl.style.width = '75px'; lbl.style.fontSize = '0.85rem';
+        lbl.innerText = ACTION_LABELS[action]; 
+        lbl.style.flex = '1'; lbl.style.fontSize = '0.8rem';
         
         const kBtn = document.createElement('button'); kBtn.className = 'config-btn';
+        kBtn.style.width = '95px'; kBtn.style.flexShrink = '0';
         kBtn.innerText = `Key: ${(keyConfig[action] || '').replace('Arrow','').replace('Key','')}`;
         kBtn.onclick = () => { assigningAction = action; assignType = 'key'; kBtn.innerText = '押してください'; };
         
         const pBtn = document.createElement('button'); pBtn.className = 'config-btn';
+        pBtn.style.width = '95px'; pBtn.style.flexShrink = '0';
         pBtn.innerText = `Pad: ${padConfig[action] !== null && padConfig[action] !== undefined ? padConfig[action] : 'なし'}`;
         pBtn.onclick = () => { assigningAction = action; assignType = 'pad'; pBtn.innerText = '押してください'; };
         
@@ -2837,32 +2967,169 @@
       document.getElementById('main-menu-actions').style.display = 'flex';
     }
 
+    function toggleContinuousSwipe() {
+      const cb = document.getElementById('continuous-swipe');
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      SE.play('cursorMove');
+      showToast(`連続移動: ${cb.checked ? 'ON' : 'OFF'}`);
+    }
+
+    function startGrab(grabState, side) {
+      if (!myEngine) return;
+      grabState.active = true;
+      grabState.side = side;
+      grabState.col = side === 'left' ? myEngine.cursor.x : myEngine.cursor.x + 1;
+      grabState.row = myEngine.cursor.y;
+      grabState.consumed = false;
+    }
+
+    function executeGrabMove(grabState, dx) {
+      if (!myEngine || !grabState.active || grabState.consumed) return false;
+      const continuous = document.getElementById('continuous-swipe')?.checked;
+      let swapped = false;
+      if (dx > 0) {
+        if (grabState.col < COLS - 1) {
+          if (myEngine.swap(grabState.col, grabState.row)) {
+            SE.play('cursorMove');
+            grabState.col++;
+            swapped = true;
+          }
+        }
+      } else if (dx < 0) {
+        if (grabState.col > 0) {
+          if (myEngine.swap(grabState.col - 1, grabState.row)) {
+            SE.play('cursorMove');
+            grabState.col--;
+            swapped = true;
+          }
+        }
+      }
+      if (swapped) {
+        if (grabState.side === 'left') {
+          myEngine.cursor.x = Math.min(COLS - 2, Math.max(0, grabState.col));
+        } else {
+          myEngine.cursor.x = Math.min(COLS - 2, Math.max(0, grabState.col - 1));
+        }
+        if (!continuous) {
+          grabState.consumed = true;
+        }
+      }
+      return swapped;
+    }
+
     let padState = {}, prevPadState = {};
+    let padHoldFrames = { Up: 0, Down: 0, Left: 0, Right: 0 };
+    let padGrabState = { active: false, side: 'left', col: 0, row: 0, consumed: false };
+    const PAD_DAS_FRAMES = 15;
+    const PAD_ARR_FRAMES = 4;
+
     function pollGamepadInput() {
       const pad = navigator.getGamepads()[0];
       if (!pad) {
         if (myEngine) myEngine.isRisingManualPad = false;
+        padHoldFrames = { Up: 0, Down: 0, Left: 0, Right: 0 };
+        padGrabState.active = false;
+        padGrabState.consumed = false;
         return;
       }
       prevPadState = { ...padState };
       pad.buttons.forEach((b, i) => padState[i] = b.pressed);
-      const justPressed = (btnIdx) => padState[btnIdx] && !prevPadState[btnIdx];
+      const justPressed = (btnIdx) => btnIdx !== null && btnIdx !== undefined && padState[btnIdx] && !prevPadState[btnIdx];
+      const isPressed = (btnIdx) => btnIdx !== null && btnIdx !== undefined && !!padState[btnIdx];
 
-      if (!myEngine || (isMatchOver && !isPracticeMode)) return;
+      if (!myEngine || (isMatchOver && !isPracticeMode)) {
+        padHoldFrames = { Up: 0, Down: 0, Left: 0, Right: 0 };
+        padGrabState.active = false;
+        padGrabState.consumed = false;
+        return;
+      }
+
+      if (justPressed(padConfig.ToggleContinuous)) {
+        toggleContinuousSwipe();
+      }
+
+      if (justPressed(padConfig.GrabLeft)) {
+        startGrab(padGrabState, 'left');
+      } else if (justPressed(padConfig.GrabRight)) {
+        startGrab(padGrabState, 'right');
+      }
+      if (padGrabState.active) {
+        if (padGrabState.side === 'left' && !isPressed(padConfig.GrabLeft)) {
+          padGrabState.active = false;
+          padGrabState.consumed = false;
+        } else if (padGrabState.side === 'right' && !isPressed(padConfig.GrabRight)) {
+          padGrabState.active = false;
+          padGrabState.consumed = false;
+        }
+      }
+
+      const checkDirTrigger = (dirName, btnIdx) => {
+        if (!isPressed(btnIdx)) {
+          padHoldFrames[dirName] = 0;
+          return false;
+        }
+        const f = padHoldFrames[dirName];
+        padHoldFrames[dirName]++;
+        if (f === 0) return true;
+        if (f >= PAD_DAS_FRAMES && (f - PAD_DAS_FRAMES) % PAD_ARR_FRAMES === 0) return true;
+        return false;
+      };
+
+      const upHeld = isPressed(padConfig.Up);
+      const downHeld = isPressed(padConfig.Down);
+      const leftHeld = isPressed(padConfig.Left);
+      const rightHeld = isPressed(padConfig.Right);
 
       let moved = false;
-      if (padConfig.Up !== null && justPressed(padConfig.Up) && myEngine.cursor.y > 0) { myEngine.cursor.y--; moved = true; }
-      if (padConfig.Down !== null && justPressed(padConfig.Down) && myEngine.cursor.y < ROWS - 1) { myEngine.cursor.y++; moved = true; }
-      if (padConfig.Left !== null && justPressed(padConfig.Left) && myEngine.cursor.x > 0) { myEngine.cursor.x--; moved = true; }
-      if (padConfig.Right !== null && justPressed(padConfig.Right) && myEngine.cursor.x < COLS - 2) { myEngine.cursor.x++; moved = true; }
+
+      if (upHeld && downHeld) {
+        padHoldFrames.Up = 0; padHoldFrames.Down = 0;
+      } else {
+        if (checkDirTrigger('Up', padConfig.Up) && myEngine.cursor.y > 0) {
+          myEngine.cursor.y--; moved = true;
+          if (padGrabState.active) {
+            padGrabState.row = myEngine.cursor.y;
+            padGrabState.col = padGrabState.side === 'left' ? myEngine.cursor.x : myEngine.cursor.x + 1;
+            padGrabState.consumed = false;
+          }
+        }
+        if (checkDirTrigger('Down', padConfig.Down) && myEngine.cursor.y < ROWS - 1) {
+          myEngine.cursor.y++; moved = true;
+          if (padGrabState.active) {
+            padGrabState.row = myEngine.cursor.y;
+            padGrabState.col = padGrabState.side === 'left' ? myEngine.cursor.x : myEngine.cursor.x + 1;
+            padGrabState.consumed = false;
+          }
+        }
+      }
+
+      if (leftHeld && rightHeld) {
+        padHoldFrames.Left = 0; padHoldFrames.Right = 0;
+      } else {
+        if (checkDirTrigger('Left', padConfig.Left)) {
+          if (padGrabState.active) {
+            executeGrabMove(padGrabState, -1);
+          } else if (myEngine.cursor.x > 0) {
+            myEngine.cursor.x--; moved = true;
+          }
+        }
+        if (checkDirTrigger('Right', padConfig.Right)) {
+          if (padGrabState.active) {
+            executeGrabMove(padGrabState, 1);
+          } else if (myEngine.cursor.x < COLS - 2) {
+            myEngine.cursor.x++; moved = true;
+          }
+        }
+      }
       
       if (moved) SE.play('cursorMove');
-      if (padConfig.Swap !== null && padConfig.Swap !== undefined && justPressed(padConfig.Swap)) myEngine.swap(myEngine.cursor.x, myEngine.cursor.y);
-      const isRise1 = padConfig.Rise1 !== null && padConfig.Rise1 !== undefined && padState[padConfig.Rise1];
-      const isRise2 = padConfig.Rise2 !== null && padConfig.Rise2 !== undefined && padState[padConfig.Rise2];
+      if (justPressed(padConfig.Swap)) myEngine.swap(myEngine.cursor.x, myEngine.cursor.y);
+      const isRise1 = isPressed(padConfig.Rise1);
+      const isRise2 = isPressed(padConfig.Rise2);
       myEngine.isRisingManualPad = !!(isRise1 || isRise2);
-      if (padConfig.TargetRight !== null && padConfig.TargetRight !== undefined && justPressed(padConfig.TargetRight)) cycleTarget(1);
-      if (padConfig.TargetLeft !== null && padConfig.TargetLeft !== undefined && justPressed(padConfig.TargetLeft)) cycleTarget(-1);
+      if (justPressed(padConfig.TargetRight)) cycleTarget(1);
+      if (justPressed(padConfig.TargetLeft)) cycleTarget(-1);
     }
 
     function updateGarbagePreview(engine, containerId) {
@@ -3070,6 +3337,14 @@
         riseBtn.addEventListener(ev, () => { if(myEngine) myEngine.isRisingManualBtn = false; });
       });
 
+      let keyGrabState = { active: false, side: 'left', col: 0, row: 0, consumed: false };
+
+      window.addEventListener('blur', () => {
+        keyGrabState.active = false;
+        keyGrabState.consumed = false;
+        if (myEngine) myEngine.isRisingManualKey = false;
+      });
+
       window.addEventListener('keydown', (e) => {
         if (assigningAction && assignType === 'key') {
           e.preventDefault();
@@ -3081,11 +3356,58 @@
         if (!myEngine || (isMatchOver && !isPracticeMode)) return;
         const code = e.code;
         let moved = false;
+
+        if (code === keyConfig.ToggleContinuous) {
+          e.preventDefault();
+          if (!e.repeat) toggleContinuousSwipe();
+        }
+        if (code === keyConfig.GrabLeft) {
+          e.preventDefault();
+          if (!e.repeat) startGrab(keyGrabState, 'left');
+        }
+        if (code === keyConfig.GrabRight) {
+          e.preventDefault();
+          if (!e.repeat) startGrab(keyGrabState, 'right');
+        }
         
-        if (code === keyConfig.Up) { e.preventDefault(); if (myEngine.cursor.y > 0) { myEngine.cursor.y--; moved = true; } }
-        if (code === keyConfig.Down) { e.preventDefault(); if (myEngine.cursor.y < ROWS - 1) { myEngine.cursor.y++; moved = true; } }
-        if (code === keyConfig.Left) { e.preventDefault(); if (myEngine.cursor.x > 0) { myEngine.cursor.x--; moved = true; } }
-        if (code === keyConfig.Right) { e.preventDefault(); if (myEngine.cursor.x < COLS - 2) { myEngine.cursor.x++; moved = true; } }
+        if (code === keyConfig.Up) {
+          e.preventDefault();
+          if (myEngine.cursor.y > 0) {
+            myEngine.cursor.y--; moved = true;
+            if (keyGrabState.active) {
+              keyGrabState.row = myEngine.cursor.y;
+              keyGrabState.col = keyGrabState.side === 'left' ? myEngine.cursor.x : myEngine.cursor.x + 1;
+              keyGrabState.consumed = false;
+            }
+          }
+        }
+        if (code === keyConfig.Down) {
+          e.preventDefault();
+          if (myEngine.cursor.y < ROWS - 1) {
+            myEngine.cursor.y++; moved = true;
+            if (keyGrabState.active) {
+              keyGrabState.row = myEngine.cursor.y;
+              keyGrabState.col = keyGrabState.side === 'left' ? myEngine.cursor.x : myEngine.cursor.x + 1;
+              keyGrabState.consumed = false;
+            }
+          }
+        }
+        if (code === keyConfig.Left) {
+          e.preventDefault();
+          if (keyGrabState.active) {
+            executeGrabMove(keyGrabState, -1);
+          } else if (myEngine.cursor.x > 0) {
+            myEngine.cursor.x--; moved = true;
+          }
+        }
+        if (code === keyConfig.Right) {
+          e.preventDefault();
+          if (keyGrabState.active) {
+            executeGrabMove(keyGrabState, 1);
+          } else if (myEngine.cursor.x < COLS - 2) {
+            myEngine.cursor.x++; moved = true;
+          }
+        }
         
         if (moved) SE.play('cursorMove');
         if (code === keyConfig.Swap) { e.preventDefault(); myEngine.swap(myEngine.cursor.x, myEngine.cursor.y); }
@@ -3095,6 +3417,14 @@
       });
 
       window.addEventListener('keyup', (e) => {
+        if (e.code === keyConfig.GrabLeft && keyGrabState.active && keyGrabState.side === 'left') {
+          keyGrabState.active = false;
+          keyGrabState.consumed = false;
+        }
+        if (e.code === keyConfig.GrabRight && keyGrabState.active && keyGrabState.side === 'right') {
+          keyGrabState.active = false;
+          keyGrabState.consumed = false;
+        }
         if (myEngine && (e.code === keyConfig.Rise1 || e.code === keyConfig.Rise2)) {
           myEngine.isRisingManualKey = false;
         }
